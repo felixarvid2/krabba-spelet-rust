@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Krabba spelet
-Comment=Nätverksspel: felsök Nordviks Cisco-nät med riktiga CLI-kommandon
-Exec=krabba-spelet
-Icon=krabba-spelet
-Terminal=false
-Categories=Game;Education;Network;
-Keywords=nätverk;cisco;ccna;felsökning;spel;
