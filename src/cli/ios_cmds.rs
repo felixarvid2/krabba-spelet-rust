@@ -851,7 +851,13 @@ fn set_secret(s: &mut IosSession, st: &mut State, a: &Args) -> CmdResult {
         c.enable_plain = None;
         return result("");
     }
-    let pw = a.v.last().map(|v| v.s().to_string()).unwrap_or_default();
+    // Sista värdet är lösenordet; i "enable secret <n:0-9> <word>" står typsiffran först.
+    // Ett ensamt ensiffrigt tal (t.ex. "enable secret 5") är lösenordet.
+    let pw = match a.v.last() {
+        Some(super::ios::Val::Num(n)) => n.to_string(),
+        Some(v) => v.s().to_string(),
+        None => String::new(),
+    };
     let min = cfg(s, st).min_pw_len;
     if min > 0 && (pw.chars().count() as i64) < min {
         return result(format!("% Password too short - must be at least {} characters. Password configuration failed", min));
@@ -973,8 +979,11 @@ fn reg_config(reg: &mut Reg) {
         },
         NO_ONLY,
     );
-    reg.d("config", "enable secret <word>", set_secret);
+    // Ordningen är viktig: parsern provar parametrarna i registreringsordning, så
+    // <n:0-9> <word> måste ligga före <word>, annars tolkas typsiffran som lösenord.
     reg.d("config", "enable secret <n:0-9> <word>", set_secret);
+    reg.d("config", "enable secret <n:0-9>", set_secret);
+    reg.d("config", "enable secret <word>", set_secret);
     reg.def("config", "enable secret", set_secret, NO_ONLY);
     reg.d("config", "enable password <word>", |s, st, a| {
         let c = cfg_mut(s, st);
@@ -1582,9 +1591,9 @@ fn gen_key(s: &mut IosSession, st: &mut State, bits: Option<i64>) -> CmdResult {
         return result("");
     }
     if let Some(b) = bits {
-        // JS slår ihop bara texten här, så fördröjningen från make() försvinner
+        // Texten slås ihop med intron, men fördröjningen (800 ms) från rsa_make() behålls
         let r = rsa_make(s, st, b);
-        return result(format!("{}{}", intro, r.out));
+        return CmdResult { out: format!("{}{}", intro, r.out), ..r };
     }
     rsa_ask_bits(s);
     result(format!("{}{}", intro, KEY_INTRO))
@@ -1795,7 +1804,9 @@ fn reg_ssh_line_vlan(reg: &mut Reg) {
             return result("% Bridge Priority must be in increments of 4096.\n% Allowed values are:\n  0     4096  8192  12288 16384 20480 24576 28672\n  32768 36864 40960 45056 49152 53248 57344 61440");
         }
         let c = cfg_mut(s, st);
-        for x in a.v[0].vlans() {
+        // "all" = alla VLAN som finns i switchen (samma tolkning som "spanning-tree vlan all" nedan)
+        let list: Vec<u16> = if a.v[0].is_all() { c.vlans.keys().copied().collect() } else { a.v[0].vlans() };
+        for x in list {
             if a.neg {
                 c.stp_priority.remove(&x);
             } else {
@@ -2543,7 +2554,10 @@ fn reg_more(reg: &mut Reg) {
             let Some(old) = old.filter(|i| i.parent.is_none() && i.svi.is_none()) else {
                 return result(s.invalid_marker(st, &a.line, &n));
             };
-            let fresh = if s.is_switch(st) {
+            // Ett loopback förblir loopback med standardvärden (inte en vanlig routerport)
+            let fresh = if old.is_loop {
+                Iface::loopback()
+            } else if s.is_switch(st) {
                 let mut f = Iface::switch_port(0);
                 f.sfp = old.sfp;
                 f
@@ -3079,5 +3093,88 @@ mod tests {
         assert!(st.dev("SW1").cfg().ifaces["GigabitEthernet0/5"].shutdown);
         s.handle_line(&mut st, "end");
         assert_eq!(s.mode, "exec");
+    }
+
+    #[test]
+    fn enable_secret_med_typnummer() {
+        let mut st = world();
+        let mut s = IosSession::new(&st, "R1", "console", true, None);
+        s.handle_line(&mut st, "configure terminal");
+        assert_eq!(s.handle_line(&mut st, "enable secret 5 hemligt").out, "");
+        assert_eq!(st.dev("R1").cfg().enable_plain.as_deref(), Some("hemligt"));
+        s.handle_line(&mut st, "enable secret 0 annat");
+        assert_eq!(st.dev("R1").cfg().enable_plain.as_deref(), Some("annat"));
+        s.handle_line(&mut st, "enable secret 9 tredje");
+        assert_eq!(st.dev("R1").cfg().enable_plain.as_deref(), Some("tredje"));
+        // ett ensamt ord är lösenordet
+        s.handle_line(&mut st, "enable secret ensamt");
+        assert_eq!(st.dev("R1").cfg().enable_plain.as_deref(), Some("ensamt"));
+        // ett ensiffrigt tal utan typ är lösenordet
+        assert_eq!(s.handle_line(&mut st, "enable secret 5").out, "");
+        assert_eq!(st.dev("R1").cfg().enable_plain.as_deref(), Some("5"));
+        // tal som inte är 0-9 är ett vanligt lösenord
+        s.handle_line(&mut st, "enable secret 42");
+        assert_eq!(st.dev("R1").cfg().enable_plain.as_deref(), Some("42"));
+    }
+
+    #[test]
+    fn crypto_modulus_behaller_fordrojning() {
+        let mut st = world();
+        st.dev_mut("R1").cfg_mut().crypto_key = None;
+        let mut s = IosSession::new(&st, "R1", "console", true, None);
+        s.handle_line(&mut st, "configure terminal");
+        s.handle_line(&mut st, "hostname R-Test");
+        s.handle_line(&mut st, "ip domain-name test.local");
+        let r = s.handle_line(&mut st, "crypto key generate rsa modulus 1024");
+        assert_eq!(r.delay, 800);
+        assert!(r.out.contains("The name for the keys will be: R-Test.test.local"), "{}", r.out);
+        assert!(r.out.contains("Generating 1024 bit RSA keys"), "{}", r.out);
+        assert_eq!(st.dev("R1").cfg().crypto_key, Some(1024));
+    }
+
+    #[test]
+    fn default_interface_loopback_forblir_loopback() {
+        let mut st = world();
+        let mut s = IosSession::new(&st, "R1", "console", true, None);
+        s.handle_line(&mut st, "configure terminal");
+        s.handle_line(&mut st, "interface loopback 9");
+        s.handle_line(&mut st, "ip address 10.9.9.9 255.255.255.255");
+        s.handle_line(&mut st, "description test");
+        s.handle_line(&mut st, "exit");
+        let o = s.handle_line(&mut st, "default interface Loopback9").out;
+        assert!(o.contains("set to default configuration"), "{}", o);
+        let k = st.dev("R1").cfg().ifaces.keys().find(|k| k.ends_with('9') && k.starts_with("Loop")).cloned().unwrap();
+        let i = &st.dev("R1").cfg().ifaces[&k];
+        assert!(i.is_loop);
+        assert!(i.ip.is_none());
+        assert!(!i.shutdown);
+        assert!(i.description.is_empty());
+        assert!(i.l2 == false && i.mode.is_empty());
+    }
+
+    #[test]
+    fn spanning_tree_vlan_all_priority() {
+        let mut st = world();
+        let mut s = IosSession::new(&st, "SW1", "console", true, None);
+        s.handle_line(&mut st, "configure terminal");
+        assert_eq!(s.handle_line(&mut st, "spanning-tree vlan all priority 8192").out, "");
+        let c = st.dev("SW1").cfg();
+        assert!(!c.vlans.is_empty());
+        for v in c.vlans.keys() {
+            assert_eq!(c.stp_priority.get(v), Some(&8192), "VLAN {}", v);
+        }
+    }
+
+    #[test]
+    fn dhcp_lease_infinite_i_running_config() {
+        let mut st = world();
+        let mut s = IosSession::new(&st, "R1", "console", true, None);
+        s.handle_line(&mut st, "configure terminal");
+        s.handle_line(&mut st, "ip dhcp pool TESTLEASE");
+        s.handle_line(&mut st, "lease infinite");
+        s.handle_line(&mut st, "end");
+        let rc = s.handle_line(&mut st, "show running-config").out;
+        let rad = rc.lines().skip_while(|l| *l != "ip dhcp pool TESTLEASE").nth(1).unwrap_or("");
+        assert_eq!(rad, " lease infinite", "{}", rc);
     }
 }
