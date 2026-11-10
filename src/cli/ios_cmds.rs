@@ -3069,7 +3069,7 @@ mod tests {
 
     /// Hela vägen via handle_line (kräver färdig simulator)
     #[test]
-    #[ignore = "kräver färdig simulator"]
+    
     fn handle_line_hela_vagen() {
         let mut st = world();
         let mut s = IosSession::new(&st, "SW1", "console", true, None);
