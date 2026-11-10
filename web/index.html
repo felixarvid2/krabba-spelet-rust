@@ -11,12 +11,54 @@
   @media (min-aspect-ratio: 16/9) { canvas { width: auto; height: 100vh; } }
   #msg { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 2em; font-size: 18px; line-height: 1.5; }
   #msg b { color: #ffd34d; }
+  /* Pekskärm (mobil och Android-appen) */
+  #touch { display: none; position: fixed; inset: 0; pointer-events: none; z-index: 5; font-family: system-ui, sans-serif; user-select: none; -webkit-user-select: none; }
+  body.touch #touch { display: block; }
+  #stick { position: absolute; left: 3vmin; bottom: 3vmin; width: 30vmin; height: 30vmin; border-radius: 50%; background: rgba(20,26,48,.45); border: 2px solid rgba(255,255,255,.25); pointer-events: auto; touch-action: none; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 12vmin; height: 12vmin; margin: -6vmin 0 0 -6vmin; border-radius: 50%; background: rgba(255,211,77,.55); }
+  .tb { position: absolute; pointer-events: auto; touch-action: none; min-width: 11vmin; height: 11vmin; border-radius: 3vmin; border: 2px solid rgba(255,255,255,.3); background: rgba(20,26,48,.55); color: #fff; font-size: 4vmin; font-weight: 600; display: flex; align-items: center; justify-content: center; padding: 0 1.5vmin; box-sizing: border-box; }
+  .tb.on, .tb:active { background: rgba(255,211,77,.6); color: #111; }
+  #bUse { right: 4vmin; bottom: 16vmin; width: 15vmin; height: 15vmin; border-radius: 50%; font-size: 5vmin; }
+  #bRun { right: 21vmin; bottom: 4vmin; }
+  #bLaptop { right: 4vmin; bottom: 3vmin; }
+  #bKbd { right: 4vmin; top: 3vmin; }
+  #bEsc { right: 17vmin; top: 3vmin; }
+  #bMenu { right: 30vmin; top: 3vmin; }
+  #more { position: absolute; right: 3vmin; top: 16vmin; display: none; flex-wrap: wrap; gap: 1.5vmin; width: 52vmin; justify-content: flex-end; pointer-events: auto; }
+  #more.open { display: flex; }
+  #more .tb, #keys .tb { position: static; font-size: 3.4vmin; height: 9vmin; min-width: 9vmin; }
+  #keys { position: absolute; left: 0; right: 0; top: 0; display: none; gap: 1vmin; padding: 1vmin; justify-content: center; flex-wrap: wrap; pointer-events: auto; background: rgba(10,13,20,.6); }
+  body.kbd #keys { display: flex; }
+  body.kbd #stick, body.kbd #bUse, body.kbd #bRun, body.kbd #bLaptop, body.kbd #bKbd, body.kbd #bEsc, body.kbd #bMenu, body.kbd #more { display: none; }
+  #ti { position: fixed; left: -100px; top: 0; width: 10px; height: 10px; opacity: 0; font-size: 16px; }
 </style>
 </head>
 <body>
 <div id="wrap"><canvas id="c" width="1280" height="720" tabindex="0"></canvas></div>
 <div id="msg">🦀 Laddar Krabba spelet…</div>
 <!-- Spelet som base64 (byggs av tools/build-web.sh), så att sidan fungerar direkt från disken -->
+<div id="touch">
+  <div id="stick"><div id="knob"></div></div>
+  <div class="tb" id="bUse">E</div>
+  <div class="tb" id="bRun">🏃</div>
+  <div class="tb" id="bLaptop">💻</div>
+  <div class="tb" id="bKbd">⌨</div>
+  <div class="tb" id="bEsc">Esc</div>
+  <div class="tb" id="bMenu">☰</div>
+  <div id="more">
+    <div class="tb" data-k="KeyL">Ledtråd</div><div class="tb" data-k="KeyF">Rapport</div><div class="tb" data-k="Tab">Ärenden</div>
+    <div class="tb" data-k="KeyH">Handbok</div><div class="tb" data-k="KeyM">Karta</div><div class="tb" data-k="KeyN">Anteckn.</div>
+    <div class="tb" data-k="KeyJ">Karriär</div><div class="tb" data-k="KeyK">Minikarta</div><div class="tb" data-k="F1">Hjälp</div>
+    <div class="tb" data-k="KeyX">Zooma ut</div><div class="tb" data-k="KeyZ">Zooma in</div>
+  </div>
+  <div id="keys">
+    <div class="tb" data-k="Tab">Tab</div><div class="tb" data-c="?">?</div><div class="tb" data-k="ArrowUp">↑</div><div class="tb" data-k="ArrowDown">↓</div>
+    <div class="tb" data-k="ArrowLeft">←</div><div class="tb" data-k="ArrowRight">→</div><div class="tb" data-ctrl="KeyC">Ctrl+C</div><div class="tb" data-ctrl="KeyZ">Ctrl+Z</div>
+    <div class="tb" data-ctrl="KeyU">Ctrl+U</div><div class="tb" data-ak="1">Ctrl+A K</div><div class="tb" data-c="|">|</div><div class="tb" data-k="PageUp">PgUp</div><div class="tb" data-k="PageDown">PgDn</div>
+    <div class="tb" data-k="Escape">Esc</div><div class="tb" data-k="Enter">⏎</div><div class="tb" id="bKbdOff">Dölj ⌨</div>
+  </div>
+  <input id="ti" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send">
+</div>
 <script src="krabba_spelet.js"></script>
 <script>
 (function () {
@@ -95,6 +137,7 @@
       };
       node.connect(actx.destination);
     }
+    window.krabbaStartAudio = startAudio;
     window.addEventListener('keydown', startAudio, true);
     window.addEventListener('mousedown', startAudio, true);
     var last = performance.now();
@@ -107,6 +150,85 @@
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
+    setupTouch();
+  }
+  // ------------------------------------------------------------------ Pekskärm
+  function setupTouch() {
+    var isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || /[?&]touch=1/.test(location.search);
+    if (!isTouch) return;
+    document.body.classList.add('touch');
+    function code(name) { return CODES.indexOf(name); }
+    function tap(name) { var k = code(name); if (k < 0) return; ex.kb_key(k, 1); setTimeout(function () { ex.kb_key(k, 0); }, 60); }
+    function chord(mod, name) { var m = code(mod), k = code(name); ex.kb_key(m, 1); ex.kb_key(k, 1); setTimeout(function () { ex.kb_key(k, 0); ex.kb_key(m, 0); }, 60); }
+    function on(el, fn) { el.addEventListener('touchstart', function (e) { e.preventDefault(); window.krabbaStartAudio(); fn(e); }, { passive: false }); el.addEventListener('mousedown', function (e) { e.preventDefault(); fn(e); }); }
+    // Styrspaken: piltangenterna
+    var stick = document.getElementById('stick'), knob = document.getElementById('knob'), held = {};
+    function setDir(dx, dy) {
+      var want = { ArrowLeft: dx < -0.35, ArrowRight: dx > 0.35, ArrowUp: dy < -0.35, ArrowDown: dy > 0.35 };
+      Object.keys(want).forEach(function (n) { if (!!held[n] !== want[n]) { held[n] = want[n]; ex.kb_key(code(n), want[n] ? 1 : 0); } });
+    }
+    function stickMove(t) {
+      var r = stick.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, R = r.width / 2;
+      var dx = (t.clientX - cx) / R, dy = (t.clientY - cy) / R, l = Math.hypot(dx, dy);
+      if (l > 1) { dx /= l; dy /= l; }
+      knob.style.transform = 'translate(' + dx * R * 0.6 + 'px,' + dy * R * 0.6 + 'px)';
+      setDir(dx, dy);
+    }
+    stick.addEventListener('touchstart', function (e) { e.preventDefault(); window.krabbaStartAudio(); stickMove(e.targetTouches[0]); }, { passive: false });
+    stick.addEventListener('touchmove', function (e) { e.preventDefault(); stickMove(e.targetTouches[0]); }, { passive: false });
+    function stickEnd(e) { e.preventDefault(); knob.style.transform = ''; setDir(0, 0); }
+    stick.addEventListener('touchend', stickEnd, { passive: false });
+    stick.addEventListener('touchcancel', stickEnd, { passive: false });
+    // Knappar
+    on(document.getElementById('bUse'), function () { tap('KeyE'); });
+    on(document.getElementById('bLaptop'), function () { tap('KeyT'); });
+    on(document.getElementById('bEsc'), function () { tap('Escape'); });
+    var run = false, bRun = document.getElementById('bRun');
+    on(bRun, function () { run = !run; bRun.classList.toggle('on', run); ex.kb_key(code('Shift'), run ? 1 : 0); });
+    var more = document.getElementById('more');
+    on(document.getElementById('bMenu'), function () { more.classList.toggle('open'); });
+    Array.prototype.forEach.call(document.querySelectorAll('#touch [data-k]'), function (b) { on(b, function () { tap(b.getAttribute('data-k')); if (b.parentNode === more) more.classList.remove('open'); }); });
+    Array.prototype.forEach.call(document.querySelectorAll('#touch [data-c]'), function (b) { on(b, function () { ex.kb_char(b.getAttribute('data-c').codePointAt(0)); }); });
+    Array.prototype.forEach.call(document.querySelectorAll('#touch [data-ctrl]'), function (b) { on(b, function () { chord('Control', b.getAttribute('data-ctrl')); }); });
+    on(document.querySelector('#touch [data-ak]'), function () { chord('Control', 'KeyA'); setTimeout(function () { tap('KeyK'); }, 120); });
+    // Tangentbordet: ett dolt textfält tar emot mobilens tangentbord
+    var ti = document.getElementById('ti');
+    function kbdOn() { document.body.classList.add('kbd'); ti.value = ''; ti.focus(); }
+    function kbdOff() { document.body.classList.remove('kbd'); ti.blur(); }
+    on(document.getElementById('bKbd'), function () { if (document.body.classList.contains('kbd')) kbdOff(); else kbdOn(); });
+    on(document.getElementById('bKbdOff'), kbdOff);
+    ti.addEventListener('beforeinput', function (e) {
+      if (e.inputType === 'deleteContentBackward') { tap('Backspace'); e.preventDefault(); }
+      else if (e.inputType === 'insertLineBreak') { tap('Enter'); e.preventDefault(); }
+    });
+    ti.addEventListener('input', function () {
+      var v = ti.value; ti.value = '';
+      for (var ch of v) { if (ch === '\n') tap('Enter'); else ex.kb_char(ch.codePointAt(0)); }
+    });
+    ti.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { tap('Enter'); e.preventDefault(); }
+      else if (e.key === 'Backspace' && !ti.value) { tap('Backspace'); e.preventDefault(); }
+      e.stopPropagation();
+    });
+    // Tryck i bilden = klick, två fingrar = zoom
+    var pinch = 0;
+    cv.addEventListener('touchstart', function (e) {
+      e.preventDefault(); window.krabbaStartAudio();
+      if (e.touches.length === 2) { pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); return; }
+      var p = pos(e.touches[0]); ex.kb_mouse(p[0], p[1]); ex.kb_button(0, 1);
+    }, { passive: false });
+    cv.addEventListener('touchmove', function (e) {
+      e.preventDefault();
+      if (e.touches.length === 2 && pinch) {
+        var d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        if (Math.abs(d - pinch) > 40) { ex.kb_wheel(d > pinch ? 1 : -1); pinch = d; }
+        return;
+      }
+      var p = pos(e.touches[0]); ex.kb_mouse(p[0], p[1]);
+    }, { passive: false });
+    cv.addEventListener('touchend', function (e) { e.preventDefault(); if (!e.touches.length) { ex.kb_button(0, 0); pinch = 0; } }, { passive: false });
+    // Android-appens bakåtknapp
+    window.krabbaBack = function () { if (document.body.classList.contains('kbd')) kbdOff(); else tap('Escape'); };
   }
   function fail(e) {
     msg.innerHTML = 'Kunde inte ladda spelet (' + e + ').<br><br>Webbläsare får inte läsa .wasm-filer direkt från disken.<br>Starta en liten webbserver i mappen, t.ex. <b>python3 -m http.server</b>, och öppna <b>http://localhost:8000</b>.<br>Eller dubbelklicka på <b>starta.bat</b> / <b>starta.sh</b>.';

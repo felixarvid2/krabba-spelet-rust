@@ -13,7 +13,7 @@
   <a href="https://github.com/felixarvid2/krabba-spelet-rust/releases/latest"><img src="https://img.shields.io/github/v/release/felixarvid2/krabba-spelet-rust?label=senaste%20release&color=orange" alt="Senaste release"></a>
   <a href="https://github.com/felixarvid2/krabba-spelet-rust/actions/workflows/release.yml"><img src="https://github.com/felixarvid2/krabba-spelet-rust/actions/workflows/release.yml/badge.svg" alt="Release"></a>
   <img src="https://img.shields.io/badge/Rust-2024-000000?logo=rust" alt="Rust 2024">
-  <img src="https://img.shields.io/badge/plattformar-webb%20%7C%20Linux-4c6ef5" alt="Webb och Linux">
+  <img src="https://img.shields.io/badge/plattformar-webb%20%7C%20Linux%20%7C%20Android-4c6ef5" alt="Webb, Linux och Android">
 </p>
 
 ---
@@ -41,6 +41,13 @@ Det enklaste är att hämta senaste versionen från [Releases](https://github.co
 3. Dubbelklicka på `index.html`.
 
 Fungerar i Chrome, Edge och Firefox – utan internet och utan installation. Framstegen sparas i webbläsaren.
+
+### Android
+
+1. Ladda ner `krabba-spelet-v<version>.apk` på telefonen eller surfplattan.
+2. Öppna filen och installera den. Tillåt installation från okända källor om telefonen frågar.
+
+Kräver Android 7.0 eller nyare. Spelet körs i liggande läge, och bakåtknappen fungerar som `Esc`.
 
 ### Ubuntu och Debian
 
@@ -144,6 +151,22 @@ Varje fel är simulerat på riktigt: symptomen räknas fram ur konfigurationen (
 | `F1` | Hjälp |
 | `Esc` | Paus / stäng |
 
+### Pekskärm
+
+På Android och i mobilens webbläsare styr du med knappar på skärmen:
+
+| Knapp | Gör |
+|---|---|
+| Styrspaken nere till vänster | Gå |
+| `E` | Använd |
+| 🏃 | Spring (av/på) |
+| 💻 | Öppna laptopen |
+| Tryck i bilden | Gå dit / använd det du trycker på |
+| Två fingrar | Zooma |
+| ⌨ | Telefonens tangentbord, med en rad för `Tab`, `?`, pilar, `Ctrl+C`, `Ctrl+Z`, `Ctrl+A K` och Enter |
+| ☰ | Ledtråd, felrapport, ärenden, handbok, karta, anteckningar, karriär och hjälp |
+| `Esc` | Paus / stäng |
+
 ### I terminalen
 
 `?`, `Tab`, `↑`/`↓`, `Ctrl+C`, `Ctrl+Z`, `Ctrl+A K` (stäng `screen`), `Ctrl+L`, `Ctrl+U`, `Ctrl+W` och `PageUp`/`PageDown` fungerar som vanligt.
@@ -172,8 +195,9 @@ src/
 └── main.rs
 tests/             simulatorn, veckorna och byggena, terminalerna, motorn och världen
 assets/            typsnitt (SIL Open Font License), ikon och .desktop-fil
-web/index.html     webbsidan som kör spelet som WebAssembly
-tools/             byggskript för webbversionen och .deb-paketet
+web/index.html     webbsidan som kör spelet som WebAssembly, med pekstyrning
+android/           Android-appen (WebView), ikoner och signeringsnyckel
+tools/             byggskript för webbversionen, .deb-paketet och APK:n
 docs/              portningsanteckningar, releaseinstruktioner och releaseanteckningar
 ```
 
@@ -198,7 +222,10 @@ cargo run --release -- --headless-demo /tmp/demo
 rustup target add wasm32-unknown-unknown
 tools/build-web.sh     # dist/web: index.html + spelet som WebAssembly
 tools/build-deb.sh     # dist/krabba-spelet_<version>_amd64.deb
+tools/build-apk.sh     # dist/krabba-spelet_<version>.apk (kräver Android SDK med platform 34 och JDK 17)
 ```
+
+Android-appen (`android/`) är en liten WebView som kör webbversionen från APK:ns assets. Den byggs utan Gradle, direkt med aapt2, javac, d8 och apksigner, och signeras med en offentlig nyckel i `android/krabba-debug.keystore` (lösenord `android`) så att nya versioner kan installeras ovanpå gamla.
 
 ### Releaser
 

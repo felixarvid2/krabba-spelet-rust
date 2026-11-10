@@ -90,6 +90,20 @@ jobs:
       - name: Bygg .deb
         run: tools/build-deb.sh
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses >/dev/null || true
+          "$SDKM" "platforms;android-34" "build-tools;34.0.0" >/dev/null
+
+      - name: Bygg Android-appen (.apk)
+        run: tools/build-apk.sh
+
       - name: Paketera
         id: files
         env:
@@ -104,8 +118,11 @@ jobs:
           DEB="krabba-spelet_${VER}_amd64.deb"
           test -f "$DEB"
           dpkg-deb -I "$DEB" | grep -q "Version: $VER"
+          APK="krabba-spelet-$TAG.apk"
+          cp "krabba-spelet_${VER}.apk" "$APK"
           echo "zip=dist/$ZIP" >> "$GITHUB_OUTPUT"
           echo "deb=dist/$DEB" >> "$GITHUB_OUTPUT"
+          echo "apk=dist/$APK" >> "$GITHUB_OUTPUT"
 
       - name: Publicera releasen
         env:
@@ -114,16 +131,17 @@ jobs:
           VER: ${{ steps.tag.outputs.ver }}
           ZIP: ${{ steps.files.outputs.zip }}
           DEB: ${{ steps.files.outputs.deb }}
+          APK: ${{ steps.files.outputs.apk }}
         run: |
           set -eu
           {
-            echo "**Spela:** packa upp \`krabba-spelet-$TAG-webb.zip\` och dubbelklicka på \`index.html\` (Chrome, Edge eller Firefox), eller installera på Ubuntu/Debian med \`sudo apt install ./krabba-spelet_${VER}_amd64.deb\`."
+            echo "**Spela:** packa upp \`krabba-spelet-$TAG-webb.zip\` och dubbelklicka på \`index.html\` (Chrome, Edge eller Firefox), installera på Ubuntu/Debian med \`sudo apt install ./krabba-spelet_${VER}_amd64.deb\`, eller ladda ner \`krabba-spelet-$TAG.apk\` på en Android-telefon eller surfplatta och installera den."
             echo
             cat "docs/releases/$TAG.md"
           } > /tmp/notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ZIP" "$DEB" --clobber
+            gh release upload "$TAG" "$ZIP" "$DEB" "$APK" --clobber
             gh release edit "$TAG" --title "Krabba spelet $TAG" --notes-file /tmp/notes.md
           else
-            gh release create "$TAG" "$ZIP" "$DEB" --target "$GITHUB_SHA" --title "Krabba spelet $TAG" --notes-file /tmp/notes.md
+            gh release create "$TAG" "$ZIP" "$DEB" "$APK" --target "$GITHUB_SHA" --title "Krabba spelet $TAG" --notes-file /tmp/notes.md
           fi
