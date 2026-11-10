@@ -23,7 +23,7 @@ use handbook::Handbook;
 use levels::Week;
 use std::collections::HashMap;
 use terminal::{TermEnv, TermEvent, Terminal};
-use ui_dialog::{Act, Dialog, DlgOut};
+use ui_dialog::{Dialog, DlgOut};
 use ui_save::{SaveData, SavedRun, SavedTask};
 use world::{Mark, World, WorldEvent};
 
@@ -1026,7 +1026,7 @@ impl App {
             WorldEvent::Cable(id) => self.cable_event(&id),
             WorldEvent::Rack(name) => {
                 if let Some(run) = &self.run {
-                    let ids = run.world.rack_units(&name);
+                    let ids: Vec<String> = run.world.rack_units(&name).into_iter().filter(|id| run.st.devices.contains_key(id)).collect();
                     let title = match name.as_str() {
                         "A" => "Rack A – nät",
                         "B" => "Rack B – servrar",

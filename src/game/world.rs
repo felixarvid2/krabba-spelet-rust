@@ -8,7 +8,7 @@ use super::art::*;
 use super::world_map::*;
 use super::world_path::{self, Nav};
 use crate::engine::{Canvas, FontKind, Fonts, Input, Key};
-use crate::net::model::{Device, LinkState, Os};
+use crate::net::model::LinkState;
 use crate::net::sim::{self, Derived, State};
 use std::collections::HashMap;
 use std::rc::Rc;

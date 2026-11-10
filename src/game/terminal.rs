@@ -1197,7 +1197,7 @@ impl Terminal {
         };
         text_fit(c, fonts, r.x + 12, r.y + 9, &title, 12.0, TEXT, FontKind::Pixel, r.w - 360);
         let mut bx = r.x + r.w - 8;
-        let mut mkbtn = |c: &mut Canvas, fonts: &mut Fonts, label: &str, bx: &mut i32| -> Rect {
+        let mkbtn = |c: &mut Canvas, fonts: &mut Fonts, label: &str, bx: &mut i32| -> Rect {
             let w = text_w(fonts, label, SMALL, FontKind::Mono) + 20;
             *bx -= w;
             let rr = Rect::new(*bx, r.y + 4, w, 26);

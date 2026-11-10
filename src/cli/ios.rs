@@ -589,7 +589,7 @@ impl IosSession {
     }
 
     // ---------- Hjälp (?) och tab
-    pub fn help_line(&mut self, st: &mut State, line: &str) -> String {
+    pub fn help_line(&mut self, _st: &mut State, line: &str) -> String {
         if self.pending.is_some() {
             return String::new();
         }

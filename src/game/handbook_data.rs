@@ -77,17 +77,13 @@ pub static ORD: &[Block] = &[
 ];
 
 pub static KEYS: &[Block] = &[
-    Block::H(r##"3D"##),
-    Block::T(&[&[r##"Tangent"##,r##"Gör"##],&[r##"W A S D / piltangenter"##,r##"Gå (Shift = spring)"##],&[r##"Mus"##,r##"Titta – klicka i bilden för att låsa musen"##],&[r##"Håll musknappen och dra"##,r##"Titta utan muslås (om låset inte fungerar)"##],&[r##"Högerklick (håll) eller Z"##,r##"Zooma in – läs frontpaneler och portar"##],&[r##"E eller klick"##,r##"Använd det du tittar på"##],&[r##"Esc"##,r##"Släpp musen och öppna pausmenyn"##],&[r##"C eller Ctrl"##,r##"Huka – läs de nedersta enheterna"##],&[r##"Mellanslag"##,r##"Hoppa"##],&[r##"V"##,r##"Ficklampa"##]]),
     Block::H(r##"2D"##),
     Block::T(&[&[r##"Tangent"##,r##"Gör"##],&[r##"W A S D / piltangenter"##,r##"Gå (Shift = spring)"##],&[r##"Klick på golvet"##,r##"Gå dit"##],&[r##"Klick på en sak eller person"##,r##"Gå dit och använd den"##],&[r##"E / mellanslag / Enter"##,r##"Använd det du står vid"##],&[r##"+ / − eller mushjulet"##,r##"Zooma"##],&[r##"Esc"##,r##"Pausmeny"##]]),
     Block::H(r##"Alltid"##),
     Block::T(&[&[r##"Tangent"##,r##"Gör"##],&[r##"T"##,r##"Öppna laptopen"##],&[r##"F"##,r##"Skriv felrapport för ett löst ärende"##],&[r##"L"##,r##"Ledtråd"##],&[r##"H"##,r##"Handboken"##],&[r##"M"##,r##"Karta och snabbresa"##],&[r##"Tab"##,r##"Ärendelistan och dina rapporter"##],&[r##"N"##,r##"Anteckningar"##],&[r##"O"##,r##"Notislogg"##],&[r##"U"##,r##"Fäll ihop HUD"##],&[r##"F1"##,r##"Den här hjälpen"##],&[r##"G"##,r##"Nätverksglasögon: kablar i statusfärg"##],&[r##"R"##,r##"Spela upp senaste pingspåret"##],&[r##"J"##,r##"Karriär, prestationer och statistik"##],&[r##"K"##,r##"Visa eller dölj minikartan"##],&[r##"P"##,r##"Fotoläge (döljer gränssnittet)"##]]),
     Block::H(r##"I terminalen"##),
     Block::T(&[&[r##"Tangent"##,r##"Gör"##],&[r##"?"##,r##"Hjälp direkt (IOS)"##],&[r##"Tab"##,r##"Fyll i kommandot eller interfacetypen"##],&[r##"↑ ↓"##,r##"Tidigare kommandon"##],&[r##"Ctrl+C"##,r##"Avbryt ping och liknande"##],&[r##"Ctrl+Z"##,r##"Hoppa till # från konfigurationsläge"##],&[r##"Ctrl+L"##,r##"Rensa skärmen"##],&[r##"PageUp / PageDown"##,r##"Bläddra"##],&[r##"Ctrl+Shift+C"##,r##"Kopiera markerad text"##],&[r##"Ctrl+A K"##,r##"Stäng konsolen (screen)"##],&[r##"Esc"##,r##"Stäng terminalfönstret"##],&[r##"→"##,r##"Ta den grå kompletteringen"##],&[r##"Ctrl+F"##,r##"Sök i utskriften (Enter = nästa)"##],&[r##"⟲"##,r##"Lista med tidigare kommandon"##],&[r##"Ctrl+R"##,r##"Sök bakåt bland tidigare kommandon (tryck igen för nästa träff)"##],&[r##"Ctrl+K"##,r##"Ta bort resten av raden"##],&[r##"Alt+."##,r##"Sista ordet från förra kommandot"##],&[r##"Ctrl+D"##,r##"Logga ut (på tom rad)"##],&[r##"!!"##,r##"Kör om senaste kommandot (Linux)"##]]),
-    Block::H(r##"Pekskärm"##),
-    Block::T(&[&[r##"Gest"##,r##"Gör"##],&[r##"Styrspaken nere till vänster"##,r##"Gå (knappen 🏃 växlar spring)"##],&[r##"Dra med fingret"##,r##"Titta (3D)"##],&[r##"Tryck på något"##,r##"Använd det (3D och 2D)"##],&[r##"Nyp med två fingrar"##,r##"Zooma (2D)"##],&[r##"☰ uppe till höger"##,r##"Alla funktioner: karta, handbok, glasögon, helskärm …"##],&[r##"Tangentraden i terminalen"##,r##"Tab, ?, pilar, Ctrl+C, Ctrl+Z och Ctrl+A K"##]]),
-    Block::P(r##"Tips: gå fram till en enhet i racket och tryck E för att sätta i konsolkabeln. Laptopen öppnas då med rätt kommando förifyllt. I 2D öppnas rackvyn där du klickar på enheten."##),
+    Block::P(r##"Tips: klicka på ett rack (eller gå fram och tryck E) för att se frontpanelerna. Klicka på en switch eller router där för att koppla in konsolkabeln."##),
 ];
 
 pub static CHAT: &[(&str, &[&str])] = &[
@@ -112,7 +108,7 @@ pub static CHAT10: &[(&str, &[&str])] = &[
     (r##"Linnea"##, &[r##""En säljare från ett SD-WAN-företag ringde tre gånger i dag.""##]),
 ];
 
-pub static TIPS: &[&str] = &[r##"Tryck G för nätverksglasögonen: kablarna lyser grönt, rött eller orange efter status."##, r##"Kör ping i terminalen och se paketen flyga genom nätet i 3D."##, r##"Krabban gömmer sig nära ett av veckans fel. Fånga den för en ledtråd och XP."##, r##"Kaffe i fikarummet gör att du går snabbare en stund."##, r##"Huka med C för att läsa de nedersta enheterna i racket."##, r##"Tre lösta fel i rad inom tre minuter ger kombobonus."##, r##"Klicka på kartan (M) för att sätta en egen markering."##, r##"Ctrl+F söker i terminalen och → tar den grå kompletteringen."##, r##"P döljer allt gränssnitt – perfekt för skärmdumpar."##, r##"Lyser statustornet på rack A orange finns det Krabba-fel kvar."##];
+pub static TIPS: &[&str] = &[r##"Kör ping i terminalen – ! betyder svar, . betyder att svaret aldrig kom."##, r##"Fastnar du? L ger en ledtråd i taget."##, r##"Tab i terminalen fyller i kommandot, ? visar vad som går att skriva härnäst."##, r##"Klicka på ett rack för att se frontpanelerna och portlamporna på nära håll."##, r##"Glöm inte write memory – annars är ändringen borta efter nästa omstart."##, r##"M öppnar kartan – därifrån kan du åka direkt till Borås."##, r##"show logging vet mer än du tror."##, r##"H öppnar handboken med adressplan, felbibliotek och subnätsräknare."##];
 
 /// (vecka, [(fråga, rätt svar, fel 1, fel 2)])
 pub static QUIZ: &[(u32, &[(&str, &str, &str, &str)])] = &[

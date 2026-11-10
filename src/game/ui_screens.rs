@@ -297,11 +297,13 @@ impl App {
     }
 
     pub fn draw_toasts(&mut self, c: &mut Canvas, fonts: &mut Fonts) {
-        let mut y = 12;
+        // Längst ner till höger, ovanför tangentraden, så att de inte skymmer rubriker
         let w = 440;
         let x = c.w as i32 - w - 12;
-        for t in &self.toasts {
-            let ls = fonts.wrap(&t.text, SMALL, FontKind::Mono, w - 20);
+        let wrapped: Vec<Vec<String>> = self.toasts.iter().map(|t| fonts.wrap(&t.text, SMALL, FontKind::Mono, w - 20)).collect();
+        let total: i32 = wrapped.iter().map(|ls| ls.len() as i32 * line_h(SMALL) + 18).sum();
+        let mut y = c.h as i32 - 48 - total;
+        for (t, ls) in self.toasts.iter().zip(wrapped.iter()) {
             let h = ls.len() as i32 * line_h(SMALL) + 12;
             let a = if t.ttl < 0.6 { (t.ttl / 0.6 * 235.0) as u8 } else { 235 };
             let (bg, bd) = match t.kind {
