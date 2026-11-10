@@ -3,6 +3,9 @@
 use crate::net::sim::State;
 
 pub mod host;
+pub mod host_lin;
+pub mod host_more;
+pub mod host_win;
 pub mod ios;
 pub mod ios_cmds;
 pub mod ios_dyn;
