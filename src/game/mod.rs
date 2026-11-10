@@ -9,6 +9,8 @@ pub mod terminal;
 pub mod ui_career;
 pub mod ui_dialog;
 pub mod ui_dialogs;
+pub mod ui_map;
+pub mod ui_play;
 pub mod ui_rack;
 pub mod ui_save;
 pub mod ui_screens;
@@ -71,6 +73,29 @@ pub struct WeekResult {
     pub stars: u32,
     pub commands: u32,
     pub badges: Vec<String>,
+    /// Veckans utmaning: (titel, klarad)
+    pub challenge: Option<(String, bool)>,
+}
+
+/// Saker som hör till en pågående vecka men inte till själva uppgifterna (karriär, kaffe, svårt läge).
+#[derive(Default)]
+pub struct RunExtra {
+    /// Uppgifter där spelaren skrivit ett beviskommando som ännu inte kontrollerats (svårt läge)
+    pub pending_proof: Vec<usize>,
+    /// Kaffet verkar tills run.elapsed når detta värde (0 = inget kaffe)
+    pub boost_until: f64,
+    pub combo: u32,
+    pub last_fix_at: Option<f64>,
+    pub week_xp: i64,
+    pub coffee_xp: bool,
+    pub monitor_first: bool,
+    pub touched_rack: bool,
+    /// Alla inskrivna rader (enhet, rad) för veckoutmaningen
+    pub chal_log: Vec<(String, String)>,
+    pub crab_caught: bool,
+    pub dist_acc: f64,
+    pub week_done: bool,
+    pub career_fp: f64,
 }
 
 /// En pågående vecka
@@ -99,6 +124,7 @@ pub struct Run {
     pub vpn_key: Option<String>,
     pub lb_key: Option<String>,
     pub site: String,
+    pub x: RunExtra,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -111,6 +137,8 @@ pub enum Overlay {
     Rack(ui_rack::RackView),
     Dlg(Dialog),
     Hand(Handbook),
+    Map(ui_map::MapView),
+    Career(ui_career::CareerView),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -150,6 +178,11 @@ pub struct QuizRun {
 pub enum DemoCmd {
     ConsoleTo(String),
     Rack(String),
+    Coffee,
+    Hard,
+    CloseAll,
+    Map,
+    Career,
 }
 
 pub struct App {
@@ -173,10 +206,16 @@ pub struct App {
     pub frame: u64,
     pub demo: Vec<(u64, DemoCmd)>,
     pub hud_report_rect: ui_widgets::Rect,
+    pub minimap: ui_map::MiniMap,
+    pub minimap_rect: ui_widgets::Rect,
+    /// Beviset för en uppgift i svårt läge (byts mot en fejk i tester)
+    pub verify_fn: fn(&str) -> levels::Verify,
+    pub matches_fn: fn(&levels::Verify, &str, &str) -> bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuAct {
+    Career,
     Start(u32, bool),
     Continue,
     Free,
@@ -209,6 +248,10 @@ impl App {
             frame: 0,
             demo: vec![],
             hud_report_rect: ui_widgets::Rect::default(),
+            minimap: ui_map::MiniMap::new(),
+            minimap_rect: ui_widgets::Rect::default(),
+            verify_fn: levels::verify,
+            matches_fn: levels::verify_matches,
         };
         let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos() as u64).unwrap_or(0);
         app.tip = (nanos % handbook_data::TIPS.len() as u64) as usize;
@@ -245,7 +288,7 @@ impl App {
         let mut world = World::new(site, n);
         world.set_week(n);
         let ts: Vec<TaskState> = week.as_ref().map(|w| w.tasks.iter().map(|t| TaskState { known: t.build, ..Default::default() }).collect()).unwrap_or_default();
-        let guide = if n == 1 && self.save.stars(1) == 0 && !exam { 0 } else { -1 };
+        let guide = if n == 1 && self.save.stars(1) == 0 && !exam && self.save.settings.difficulty != "hard" { 0 } else { -1 };
         let mut run = Run {
             n,
             week,
@@ -271,6 +314,7 @@ impl App {
             vpn_key: None,
             lb_key: None,
             site: site.to_string(),
+            x: RunExtra::default(),
         };
         S::refresh(&mut run.st);
         snapshot_up(&mut run);
@@ -288,6 +332,8 @@ impl App {
         self.save.last_week = Some(n);
         self.save.run = None;
         self.refresh_markers();
+        self.place_crab();
+        self.apply_weather();
         self.save.save();
         let d = self.briefing_dialog(true);
         self.push_dlg(d);
@@ -333,6 +379,7 @@ impl App {
             vpn_key: None,
             lb_key: None,
             site: sr.site,
+            x: RunExtra { crab_caught: sr.crab_caught, ..Default::default() },
         };
         if let Some(w) = &run.week {
             if w.tasks.len() != run.ts.len() {
@@ -345,6 +392,8 @@ impl App {
         self.screen = Screen::Play;
         self.overlays.clear();
         self.refresh_markers();
+        self.place_crab();
+        self.apply_weather();
         let name = levels::name(self.run.as_ref().and_then(|r| r.week.as_ref()));
         self.toast(format!("Välkommen tillbaka! {} fortsätter där du var.", name), ToastKind::Good);
         true
@@ -364,6 +413,7 @@ impl App {
             console: run.console_target.clone(),
             commands: run.commands,
             site: run.world.site.clone(),
+            crab_caught: run.x.crab_caught,
         })
     }
 
@@ -435,63 +485,54 @@ impl App {
 
     // ------------------------------------------------------------------ uppgifter
 
+    /// Kollar uppgifterna. I svårt läge bekräftas inget här: felet måste bevisas (se settle_proofs).
     pub fn check_tasks(&mut self) {
-        let mut toasts: Vec<(String, ToastKind)> = vec![];
-        let mut fixed_now = false;
-        let mut all_done = false;
-        {
-            let run = match &mut self.run {
-                Some(r) => r,
-                None => return,
+        if !self.hard() {
+            let n = match &self.run {
+                Some(r) if !r.done => r.ts.len(),
+                _ => return,
             };
-            let week = match &run.week {
-                Some(w) => w.clone(),
-                None => return,
-            };
-            if run.done {
-                return;
-            }
-            for (i, t) in week.tasks.iter().enumerate() {
-                if run.ts[i].fixed {
-                    continue;
-                }
-                let ok = (t.check)(&mut run.st);
-                if ok {
-                    run.ts[i].fixed = true;
-                    run.ts[i].known = true;
-                    run.last_progress = run.elapsed;
-                    if t.build {
-                        run.ts[i].reported = true;
-                        run.ts[i].score = 2;
-                        let left = run.ts.iter().filter(|s| !s.fixed).count();
-                        toasts.push((format!("{} är klart!{}", t.title, if left > 0 { format!(" {} steg kvar i bygget.", left) } else { String::new() }), ToastKind::Good));
+            let mut any = false;
+            for i in 0..n {
+                let ok = {
+                    let run = self.run.as_mut().unwrap();
+                    let week = match &run.week {
+                        Some(w) => w,
+                        None => return,
+                    };
+                    if run.ts[i].fixed {
+                        false
                     } else {
-                        toasts.push((format!("{} är löst! Skriv felrapporten med F.", t.title), ToastKind::Good));
+                        (week.tasks[i].check)(&mut run.st)
                     }
-                    fixed_now = true;
+                };
+                if ok {
+                    self.confirm_task(i, false);
+                    any = true;
                 }
             }
-            if run.ts.iter().all(|s| s.reported) && !week.tasks.is_empty() {
-                all_done = true;
+            if any {
+                self.refresh_markers();
+                self.remind_reports();
             }
         }
-        for (t, k) in toasts {
-            self.toast(t, k);
-        }
-        if fixed_now {
-            self.refresh_markers();
-            self.remind_reports();
-        }
+        self.check_done();
+    }
+
+    /// Veckan är klar när alla uppgifter har rapport
+    pub fn check_done(&mut self) {
+        let all_done = match &self.run {
+            Some(r) if !r.done => r.week.as_ref().map(|w| !w.tasks.is_empty()).unwrap_or(false) && r.ts.iter().all(|s| s.reported),
+            _ => false,
+        };
         if all_done {
-            let done_before = self.run.as_ref().map(|r| r.done).unwrap_or(true);
-            if !done_before {
-                if let Some(r) = &mut self.run {
-                    r.done = true;
-                }
-                let res = self.result();
-                self.save_week(&res);
-                self.delayed.push((0.9, Delayed::WeekDone));
+            if let Some(r) = &mut self.run {
+                r.done = true;
             }
+            let res = self.result();
+            self.save_week(&res);
+            self.on_week_done(&res);
+            self.delayed.push((0.9, Delayed::WeekDone));
         }
     }
 
@@ -506,6 +547,9 @@ impl App {
     }
 
     fn remind_reports(&mut self) {
+        if self.hard() {
+            return;
+        }
         let pend = self.pending_reports();
         if pend.is_empty() {
             return;
@@ -552,7 +596,8 @@ impl App {
         if run.exam {
             badges.push("Examen klarad".to_string());
         }
-        WeekResult { minutes, hints, report_score: rs, report_max: max, stars, commands: run.commands, badges }
+        let challenge = self.challenge_status().map(|(t, ok)| (t.to_string(), ok));
+        WeekResult { minutes, hints, report_score: rs, report_max: max, stars, commands: run.commands, badges, challenge }
     }
 
     fn save_week(&mut self, res: &WeekResult) {
@@ -570,13 +615,14 @@ impl App {
                 badges.push(b.clone());
             }
         }
-        let p = ui_save::WeekProgress { stars: res.stars.max(old.stars), minutes: if old.minutes > 0 { old.minutes.min(res.minutes) } else { res.minutes }, badges };
+        let p = ui_save::WeekProgress { stars: res.stars.max(old.stars), minutes: if old.minutes > 0 { old.minutes.min(res.minutes) } else { res.minutes }, badges, challenge: old.challenge };
         self.save.progress.insert(n, p);
         self.save.run = None;
         self.save.save();
     }
 
     pub fn submit_report(&mut self, idx: usize, r: ReportData) {
+        let score = r.score;
         if let Some(run) = &mut self.run {
             let s = &mut run.ts[idx];
             s.reported = true;
@@ -584,6 +630,7 @@ impl App {
             s.report = Some(r);
             run.last_progress = run.elapsed;
         }
+        self.on_report(score);
         self.refresh_markers();
         self.check_tasks();
     }
@@ -651,6 +698,7 @@ impl App {
         self.check_tasks();
         self.check_guide();
         self.nudge();
+        self.career_tick();
     }
 
     fn nudge(&mut self) {
@@ -817,7 +865,10 @@ impl App {
             if dev == "SW2" && is_show_sp(line) {
                 run.st.flags.misc.insert("stpLooked".into(), true);
             }
+            run.x.chal_log.push((dev.to_string(), line.to_string()));
         }
+        self.count_command(line);
+        self.note_proof_command(dev, line);
     }
 
     // ------------------------------------------------------------------ uppdatera
@@ -919,9 +970,12 @@ impl App {
                     let d = self.tasks_dialog();
                     self.push_dlg(d);
                 }
-                Key::M => {
-                    let d = self.map_dialog();
-                    self.push_dlg(d);
+                Key::M => self.open_map(),
+                Key::J => self.overlays.push(Overlay::Career(ui_career::CareerView::new())),
+                Key::K => {
+                    self.save.settings.minimap = !self.save.settings.minimap;
+                    let t = if self.save.settings.minimap { "Minikartan visas (K döljer den)." } else { "Minikartan är dold (K visar den)." };
+                    self.toast(t, ToastKind::Info);
                 }
                 Key::N => {
                     let d = self.notes_dialog();
@@ -949,9 +1003,24 @@ impl App {
             self.open_report_picker();
             return;
         }
+        // klick på minikartan: gå dit
+        if input.clicked && self.save.settings.minimap && self.save.settings.hud && self.minimap_rect.contains(input.mouse_x, input.mouse_y) {
+            let r = self.minimap_rect;
+            let run = self.run.as_mut().unwrap();
+            let (wx, wz) = ui_map::MiniMap::to_world(&run.world, r.x, r.y, input.mouse_x, input.mouse_y);
+            run.world.walk_to_point(wx, wz);
+            return;
+        }
         let events = {
             let run = self.run.as_mut().unwrap();
-            run.world.update(input, dt, &run.st, false)
+            let ev = run.world.update(input, dt, &run.st, false);
+            let d = run.world.take_walked();
+            run.x.dist_acc += d;
+            if run.x.dist_acc >= 5.0 {
+                let a = std::mem::take(&mut run.x.dist_acc);
+                self.save.career.bump("dist", a);
+            }
+            ev
         };
         for e in events {
             self.handle_world_event(e);
@@ -963,6 +1032,7 @@ impl App {
             S::refresh(&mut run.st);
         }
         self.watch_week10();
+        self.settle_proofs();
         self.check_tasks();
     }
 
@@ -1014,7 +1084,12 @@ impl App {
 
     fn handle_world_event(&mut self, e: WorldEvent) {
         match e {
-            WorldEvent::Console(id) => self.connect_console(&id),
+            WorldEvent::Console(id) => {
+                if let Some(r) = &mut self.run {
+                    r.x.touched_rack = true;
+                }
+                self.connect_console(&id)
+            }
             WorldEvent::UseHost(id) => {
                 let d = self.pc_dialog(&id);
                 self.push_dlg(d);
@@ -1026,6 +1101,9 @@ impl App {
             }
             WorldEvent::Cable(id) => self.cable_event(&id),
             WorldEvent::Rack(name) => {
+                if let Some(r) = &mut self.run {
+                    r.x.touched_rack = true;
+                }
                 if let Some(run) = &self.run {
                     let ids: Vec<String> = run.world.rack_units(&name).into_iter().filter(|id| run.st.devices.contains_key(id)).collect();
                     let title = match name.as_str() {
@@ -1059,14 +1137,23 @@ impl App {
             }
             WorldEvent::Use(what) => {
                 let w = what.to_lowercase();
-                if w.contains("whiteboard") || w.contains("tavla") {
+                if w.starts_with("djur:") {
+                    self.animal_event(&what[5..]);
+                } else if w == "krabba" || w.contains("crab") {
+                    self.catch_crab();
+                } else if w.contains("whiteboard") || w.contains("tavla") {
                     let d = self.whiteboard_dialog();
                     self.push_dlg(d);
                 } else if w.contains("monitor") || w.contains("övervak") {
+                    if let Some(r) = &mut self.run {
+                        if !r.x.touched_rack {
+                            r.x.monitor_first = true;
+                        }
+                    }
                     let d = self.monitor_dialog();
                     self.push_dlg(d);
                 } else if w.contains("coffee") || w.contains("kaffe") {
-                    self.toast("Kaffe! Perfekt inför nästa felsökning.", ToastKind::Good);
+                    self.drink_coffee();
                 } else if w.contains("water") || w.contains("vatten") {
                     self.toast("Uppfriskande! Glöm inte att dricka vatten mellan felsökningarna.", ToastKind::Info);
                 } else if w.contains("printer") || w.contains("skrivare") {
@@ -1096,6 +1183,7 @@ impl App {
     }
 
     fn travel(&mut self, site: &str) {
+        self.stat("trips");
         if let Some(run) = &mut self.run {
             run.world.set_site(site);
             run.site = site.to_string();
@@ -1141,6 +1229,7 @@ impl App {
             }
             S::touch(&mut run.st);
             S::refresh(&mut run.st);
+            self.save.career.bump("cables", 1.0);
             if replaced {
                 if was == crate::net::model::LinkState::Ok { format!("Du bytte kabeln {}. Ingen skillnad – den gamla var hel.", name) } else { format!("Du bytte patchkabeln {}.", name) }
             } else if plugged {
@@ -1179,6 +1268,20 @@ impl App {
                 if h.closed {
                     self.overlays.pop();
                 }
+            }
+            Overlay::Career(v) => {
+                v.update(input);
+                if v.closed {
+                    self.overlays.pop();
+                }
+            }
+            Overlay::Map(m) => {
+                let act = m.update(input);
+                let rect = m.map_rect;
+                if m.closed {
+                    self.overlays.pop();
+                }
+                self.map_act(act, rect);
             }
             Overlay::Dlg(d) => {
                 let out = d.update(input);
@@ -1245,6 +1348,19 @@ impl App {
                 let (_, cmd) = self.demo.remove(i);
                 match cmd {
                     DemoCmd::Rack(n) => self.handle_world_event(WorldEvent::Rack(n)),
+                    DemoCmd::Coffee => self.handle_world_event(WorldEvent::Use("coffee".into())),
+                    DemoCmd::CloseAll => self.overlays.clear(),
+                    DemoCmd::Map => self.open_map(),
+                    DemoCmd::Career => self.overlays.push(Overlay::Career(ui_career::CareerView::new())),
+                    DemoCmd::Hard => {
+                        self.save.settings.difficulty = "hard".into();
+                        if let Some(r) = &mut self.run {
+                            for t in &mut r.ts {
+                                t.known = true;
+                            }
+                        }
+                        self.refresh_markers();
+                    }
                     DemoCmd::ConsoleTo(id) => {
                         let id = if self.run.as_ref().map(|r| r.st.devices.contains_key(&id)).unwrap_or(false) { id } else { "SW1".to_string() };
                         self.connect_console(&id);
@@ -1382,8 +1498,25 @@ impl engine::Game for App {
         // överlägg
         let mouse = self.mouse;
         let t = self.time;
+        let pinfo = self.progress_info();
         for o in &mut self.overlays {
             match o {
+                Overlay::Career(v) => v.draw(c, fonts, &self.save.career, &pinfo),
+                Overlay::Map(m) => {
+                    if let Some(run) = &self.run {
+                        let mut tickets: Vec<String> = vec![];
+                        if self.save.settings.difficulty != "hard" {
+                            if let Some(w) = &run.week {
+                                for (i, t) in w.tasks.iter().enumerate() {
+                                    if !run.ts[i].fixed && !tickets.iter().any(|x| x == t.npc) {
+                                        tickets.push(t.npc.to_string());
+                                    }
+                                }
+                            }
+                        }
+                        m.draw(c, fonts, &run.world, mouse, &tickets);
+                    }
+                }
                 Overlay::Rack(r) => {
                     if let Some(run) = &mut self.run {
                         r.draw(c, fonts, &mut run.st, mouse, t);
@@ -1416,6 +1549,15 @@ impl App {
         }
         if self.save.settings.hud {
             self.draw_hud(c, fonts);
+            if self.save.settings.minimap {
+                let (mx, my) = (c.w as i32 - ui_map::MINI_W - 14, 14);
+                self.minimap_rect = ui_widgets::Rect::new(mx, my, ui_map::MINI_W, ui_map::MINI_H);
+                let t = self.time;
+                let App { minimap, run, .. } = self;
+                if let Some(run) = run {
+                    minimap.draw(c, fonts, &run.world, mx, my, t);
+                }
+            }
         }
         if self.term.open {
             let mouse = self.mouse;
@@ -1573,5 +1715,40 @@ pub fn headless_demo(dir: &str) {
     wait(&mut inputs, 5);
     shots.push((inputs.len().saturating_sub(1), format!("{}/10-rack.png", dir)));
     wait(&mut inputs, 2);
+    app.demo.push((inputs.len() as u64, DemoCmd::CloseAll));
+    wait(&mut inputs, 3);
+    // kartan, karriären
+    app.demo.push((inputs.len() as u64, DemoCmd::Map));
+    wait(&mut inputs, 4);
+    shots.push((inputs.len().saturating_sub(1), format!("{}/11-karta.png", dir)));
+    inputs.push(key(Key::Num2));
+    wait(&mut inputs, 4);
+    shots.push((inputs.len().saturating_sub(1), format!("{}/11b-karta-boras.png", dir)));
+    app.demo.push((inputs.len() as u64, DemoCmd::CloseAll));
+    wait(&mut inputs, 3);
+    app.demo.push((inputs.len() as u64, DemoCmd::CloseAll));
+    wait(&mut inputs, 3);
+    app.demo.push((inputs.len() as u64, DemoCmd::Career));
+    wait(&mut inputs, 4);
+    shots.push((inputs.len().saturating_sub(1), format!("{}/12-karriar.png", dir)));
+    app.demo.push((inputs.len() as u64, DemoCmd::CloseAll));
+    wait(&mut inputs, 3);
+    // kaffe och ärendelista med utmaning
+    app.demo.push((inputs.len() as u64, DemoCmd::Coffee));
+    wait(&mut inputs, 4);
+    inputs.push(key(Key::Tab));
+    wait(&mut inputs, 4);
+    shots.push((inputs.len().saturating_sub(1), format!("{}/13-arenden-utmaning.png", dir)));
+    inputs.push(key(Key::Escape));
+    wait(&mut inputs, 3);
+    // svårt läge
+    app.demo.push((inputs.len() as u64, DemoCmd::Hard));
+    wait(&mut inputs, 4);
+    inputs.push(key(Key::Tab));
+    wait(&mut inputs, 4);
+    shots.push((inputs.len().saturating_sub(1), format!("{}/14-svart-arenden.png", dir)));
+    inputs.push(key(Key::Escape));
+    wait(&mut inputs, 4);
+    shots.push((inputs.len().saturating_sub(1), format!("{}/15-svart-hud.png", dir)));
     engine::run_headless(&mut app, &inputs, &shots);
 }

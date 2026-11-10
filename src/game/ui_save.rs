@@ -20,11 +20,15 @@ pub struct Settings {
     pub show_keys: bool,
     /// Visa HUD
     pub hud: bool,
+    /// Visa minikartan i hörnet (K)
+    pub minimap: bool,
+    /// "auto" (varierar) eller "sol"
+    pub weather: String,
 }
 
 impl Default for Settings {
     fn default() -> Settings {
-        Settings { difficulty: "normal".into(), term_font: 22, term_theme: "classic".into(), fast_output: false, show_keys: true, hud: true }
+        Settings { difficulty: "normal".into(), term_font: 22, term_theme: "classic".into(), fast_output: false, show_keys: true, hud: true, minimap: true, weather: "auto".into() }
     }
 }
 
@@ -34,6 +38,9 @@ pub struct WeekProgress {
     pub minutes: u32,
     #[serde(default)]
     pub badges: Vec<String>,
+    /// Veckans utmaning är klarad
+    #[serde(default)]
+    pub challenge: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -50,6 +57,8 @@ pub struct SaveData {
     pub history: HashMap<String, Vec<String>>,
     /// Pågående vecka (Fortsätt)
     pub run: Option<SavedRun>,
+    /// Karriären: XP, statistik och prestationer
+    pub career: super::ui_career::Career,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -71,6 +80,9 @@ pub struct SavedRun {
     pub console: Option<String>,
     pub commands: u32,
     pub site: String,
+    /// Krabban är redan fångad den här veckan
+    #[serde(default)]
+    pub crab_caught: bool,
 }
 
 pub fn save_dir() -> PathBuf {
@@ -120,7 +132,7 @@ mod tests {
     #[test]
     fn roundtrip() {
         let mut d = SaveData::default();
-        d.progress.insert(3, WeekProgress { stars: 2, minutes: 9, badges: vec!["x".into()] });
+        d.progress.insert(3, WeekProgress { stars: 2, minutes: 9, badges: vec!["x".into()], challenge: false });
         d.last_week = Some(3);
         let s = serde_json::to_string(&d).unwrap();
         let e: SaveData = serde_json::from_str(&s).unwrap();

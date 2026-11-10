@@ -557,7 +557,8 @@ impl Terminal {
             }
         }
         if !secret && !line.trim().is_empty() {
-            events.push(TermEvent::Command(dev, line.to_string()));
+            let real = self.top().map(|t| t.session.dev_id().to_string()).filter(|d| !d.is_empty()).unwrap_or(dev);
+            events.push(TermEvent::Command(real, line.to_string()));
         }
         let r = match self.stack.last_mut() {
             Some(t) => {

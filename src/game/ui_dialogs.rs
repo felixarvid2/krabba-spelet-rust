@@ -57,7 +57,11 @@ impl App {
                     d = d.text(format!("• {}", l));
                 }
                 if let Some(ch) = w.challenge {
-                    d = d.tone(format!("Veckans utmaning: {}", ch), Tone::Muted);
+                    let done = run.map(|r| self.challenge_marked(r.n)).unwrap_or(false);
+                    d = d.tone(format!("Veckans utmaning: {}{}", ch, if done { " (redan klarad)" } else { " – ger 75 XP" }), Tone::Muted);
+                }
+                if self.hard() {
+                    d = d.tone("SVÅRT LÄGE: spelet säger inte till när ett fel är löst. Bevisa det med ett kommando (kravet står i ärendelistan, Tab), skriv sedan felrapporten.", Tone::Bad);
                 }
             }
             None => d = d.text("Fri träning: Nordviks nät utan fel. Koppla in dig var du vill, bygg om och testa."),
@@ -434,7 +438,22 @@ impl App {
             ]);
         }
         d = d.item(Item::Table(rows));
-        d = d.tone("Utropstecken över en person betyder att hen har ett ärende. Krabba-felen hittar du genom att lyssna på kollegorna och felsöka.", Tone::Muted);
+        if self.hard() {
+            d = d.tone("SVÅRT LÄGE – bevis krävs. Ett fel räknas som löst först när det är rättat och du sedan kör beviskommandot:", Tone::Bad);
+            for (i, t) in w.tasks.iter().enumerate() {
+                if !run.ts[i].fixed && (run.ts[i].known || t.build) {
+                    d = d.text(format!("• {}: {}", clip_str(t.title, 40), self.proof_text(t.id)));
+                }
+            }
+        } else {
+            d = d.tone("Utropstecken över en person betyder att hen har ett ärende. Krabba-felen hittar du genom att lyssna på kollegorna och felsöka.", Tone::Muted);
+        }
+        if let Some(ch) = w.challenge {
+            if !run.exam {
+                let done = self.challenge_marked(run.n);
+                d = d.tone(format!("Veckans utmaning: {} – {}", ch, if done { "klarad (75 XP)" } else if super::levels::challenge_need(run.n) { "ej klar än" } else { "avgörs när veckan är klar" }), if done { Tone::Good } else { Tone::Muted });
+            }
+        }
         for (i, t) in w.tasks.iter().enumerate() {
             if run.ts[i].reported && !t.build {
                 d = d.btn(Btn::new(&format!("Rapport: {}", clip_str(t.title, 22)), Act::ViewReport(i)));
@@ -532,7 +551,11 @@ impl App {
         };
         let ready: Vec<usize> = (0..w.tasks.len()).filter(|i| run.ts[*i].fixed && !run.ts[*i].reported && !w.tasks[*i].build).collect();
         if ready.is_empty() {
-            self.toast("Inget ärende är löst ännu. Lös ett fel först, sedan skriver du rapporten här.", ToastKind::Info);
+            if self.hard() {
+                self.toast("Inget fel är bevisat än. Rätta felet och kör beviskommandot (se ärendelistan, Tab) först.", ToastKind::Info);
+            } else {
+                self.toast("Inget ärende är löst ännu. Lös ett fel först, sedan skriver du rapporten här.", ToastKind::Info);
+            }
             return;
         }
         if ready.len() == 1 {
@@ -647,6 +670,9 @@ impl App {
         if !res.badges.is_empty() {
             d = d.text(format!("Utmärkelser: {}", res.badges.join(", ")));
         }
+        if let Some((t, ok)) = &res.challenge {
+            d = d.tone(format!("Veckans utmaning – {}: {}", t, if *ok { "klarad! +75 XP" } else { "inte den här gången" }), if *ok { Tone::Good } else { Tone::Muted });
+        }
         d = d.tone(if build { "Nätet fungerar – och du byggde det själv." } else { "Kopiera felrapport.md och lägg den i veckans mapp i ditt repo, precis som efter ett riktigt Krabba-pass." }, Tone::Muted);
         let mut copy = Btn::new("Kopiera felrapport.md", Act::CopyReport);
         copy.keep = true;
@@ -668,7 +694,9 @@ impl App {
             .item(Item::Check { id: "fast", label: "Snabb utskrift i terminalen (korta väntetider för ping m.m.)".into(), on: s.fast_output })
             .item(Item::Check { id: "keys", label: "Visa tangentraden längst ned".into(), on: s.show_keys })
             .item(Item::Check { id: "hud", label: "Visa HUD (U växlar)".into(), on: s.hud })
-            .tone("Lätt: ledtrådar kostar inga poäng. Svår: ingen pil, markör eller utropstecken.", Tone::Muted)
+            .item(Item::Choice { id: "weather", label: "Väder".into(), options: vec!["Varierar".into(), "Alltid sol".into()], sel: if s.weather == "sol" { 1 } else { 0 } })
+            .item(Item::Check { id: "mini", label: "Visa minikartan (K växlar)".into(), on: s.minimap })
+            .tone("Lätt: ledtrådar kostar inga poäng. Svår: ingen pil, markör eller utropstecken, och fel måste bevisas med ett kommando. XP ×1,5.", Tone::Muted)
             .btn(Btn::primary("Klar", Act::SettingsApply))
             .btn(Btn::new("Avbryt", Act::Close))
     }
@@ -683,6 +711,9 @@ impl App {
         self.save.settings.fast_output = d.checked("fast");
         self.save.settings.show_keys = d.checked("keys");
         self.save.settings.hud = d.checked("hud");
+        self.save.settings.minimap = d.checked("mini");
+        self.save.settings.weather = if d.choice("weather") == 1 { "sol".into() } else { "auto".into() };
+        self.apply_weather();
         self.term.font = self.save.settings.term_font as f32;
         self.term.theme = self.save.settings.term_theme.clone();
         self.refresh_markers();
@@ -846,6 +877,7 @@ impl App {
                     run.ts[i].hints += 1;
                     run.last_progress = run.elapsed;
                 }
+                self.on_hint();
                 let dl = self.hint_dialog(i);
                 self.push_dlg(dl);
             }

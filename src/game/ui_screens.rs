@@ -84,6 +84,7 @@ impl App {
                 let d = self.settings_dialog();
                 self.push_dlg(d);
             }
+            MenuAct::Career => self.overlays.push(super::Overlay::Career(super::ui_career::CareerView::new())),
             MenuAct::Quit => self.quit = true,
         }
     }
@@ -161,6 +162,7 @@ impl App {
             (cont_label, MenuAct::Continue, true),
             ("Fri träning".into(), MenuAct::Free, false),
             ("Examen".into(), MenuAct::Exam, false),
+            ("Karriär".into(), MenuAct::Career, false),
             ("Inställningar".into(), MenuAct::Settings, false),
             ("Avsluta".into(), MenuAct::Quit, false),
         ];
@@ -213,6 +215,7 @@ impl App {
         let place = run.world.zone_name();
         let clock = if run.st.devices.contains_key("R1") { crate::net::sim::device_clock(&mut self.run.as_mut().unwrap().st, "R1").hms } else { String::new() };
         let run = self.run.as_ref().unwrap();
+        let hard = self.save.settings.difficulty == "hard";
         let sub = format!("{} · {} · {}{}", place, clock.chars().take(5).collect::<String>(), esc_time(run.elapsed), if run.exam { " · EXAMEN" } else { "" });
         let mut task_lines: Vec<(String, Rgb)> = vec![];
         if let Some(wk) = &run.week {
@@ -224,10 +227,16 @@ impl App {
                 let extra = if s.fixed && !s.reported { "  – skriv felrapport (F)" } else { "" };
                 task_lines.push((format!("{} {}{}{}", mark, who, name, extra), col));
             }
+            if !run.exam {
+                if let Some(t) = super::levels::challenge_title(run.n) {
+                    let done = self.challenge_marked(run.n);
+                    task_lines.push((format!("{} Utmaning: {}", if done { "[x]" } else { "[ ]" }, t), if done { GOOD } else { MUTED }));
+                }
+            }
         }
         let _ = &mut rows;
         // höjd
-        let mut hh = 38 + line_h(SMALL) + 6;
+        let mut hh = 38 + line_h(SMALL) + 6 + line_h(SMALL) + 14;
         let mut wrapped: Vec<(Vec<String>, Rgb)> = vec![];
         for (t, col) in &task_lines {
             let ls = fonts.wrap(t, SMALL, FontKind::Mono, w - 24);
@@ -237,10 +246,17 @@ impl App {
         hh += 8;
         c.fill_rect_a(x, y, w, hh, rgb(0x0c, 0x0e, 0x18), 215);
         c.rect(x, y, w, hh, 1, BORDER);
-        text_fit(c, fonts, x + 10, y + 9, &title, 11.0, ACCENT, FontKind::Pixel, w - 20);
+        text_fit(c, fonts, x + 10, y + 9, &title, 11.0, ACCENT, FontKind::Pixel, w - if hard { 80 } else { 20 });
         y += 30;
         fonts.text(c, x + 10, y, &sub, SMALL, MUTED, FontKind::Mono);
         y += line_h(SMALL) + 6;
+        super::ui_career::draw_xp_bar(c, fonts, x + 12, y, w - 24, &self.save.career);
+        y += line_h(SMALL) + 14;
+        if hard {
+            let tw = text_w(fonts, "SVÅR", 10.0, FontKind::Pixel);
+            c.fill_rect(x + w - tw - 24, 8 + 6, tw + 12, 20, rgb(0x8a, 0x1f, 0x1f));
+            fonts.text(c, x + w - tw - 18, 8 + 11, "SVÅR", 10.0, TEXT, FontKind::Pixel);
+        }
         for (ls, col) in &wrapped {
             for l in ls {
                 fonts.text(c, x + 12, y, l, SMALL, *col, FontKind::Mono);
@@ -254,7 +270,7 @@ impl App {
             y += line_h(SMALL) + 4;
         }
         // gula rutan
-        if pend > 0 {
+        if pend > 0 && !hard {
             let txt = format!("{} felrapport{} att skicka in – tryck F eller klicka här", pend, if pend == 1 { "" } else { "er" });
             let ls = fonts.wrap(&txt, SMALL, FontKind::Mono, w - 20);
             let bh = ls.len() as i32 * line_h(SMALL) + 12;
