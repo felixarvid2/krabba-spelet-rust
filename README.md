@@ -198,7 +198,10 @@ cargo run --release -- --headless-demo /tmp/demo
 rustup target add wasm32-unknown-unknown
 tools/build-web.sh     # dist/web: index.html + spelet som WebAssembly
 tools/build-deb.sh     # dist/krabba-spelet_<version>_amd64.deb
+tools/build-apk.sh     # dist/krabba-spelet_<version>.apk (kräver Android SDK med platform 34 och JDK 17)
 ```
+
+Android-appen (`android/`) är en liten WebView som kör webbversionen från APK:ns assets. Den byggs utan Gradle, direkt med aapt2, javac, d8 och apksigner, och signeras med en offentlig nyckel i `android/krabba-debug.keystore` (lösenord `android`) så att nya versioner kan installeras ovanpå gamla.
 
 ### Releaser
 

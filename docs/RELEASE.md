@@ -15,7 +15,8 @@ Arbetsflödet kör på Ubuntu 22.04 (glibc 2.35, så paketet fungerar på Ubuntu
 - `cargo test --release` – fallerar testerna blir det ingen release.
 - `tools/build-web.sh` – webbversionen (WebAssembly) som zip: `krabba-spelet-vX.Y.Z-webb.zip`.
 - `tools/build-deb.sh` – `krabba-spelet_X.Y.Z_amd64.deb`.
-- Skriver release-texten (en svensk installationsrad + innehållet i `docs/releases/vX.Y.Z.md`) och publicerar releasen "Krabba spelet vX.Y.Z" med båda filerna bifogade.
+- `tools/build-apk.sh` – Android-appen, publiceras som `krabba-spelet-vX.Y.Z.apk` (versionCode = X·10000 + Y·100 + Z).
+- Skriver release-texten (en svensk installationsrad + innehållet i `docs/releases/vX.Y.Z.md`) och publicerar releasen "Krabba spelet vX.Y.Z" med de tre filerna bifogade.
 
 Taggen måste matcha `^v[0-9]+\.[0-9]+\.[0-9]+$` och versionen i `Cargo.toml` måste vara samma, annars avbryts jobbet.
 
@@ -31,6 +32,7 @@ Taggen måste matcha `^v[0-9]+\.[0-9]+\.[0-9]+$` och versionen i `Cargo.toml` m�
    cargo test --release
    tools/build-web.sh
    tools/build-deb.sh
+   tools/build-apk.sh   # kräver Android SDK (platforms;android-34, build-tools) och JDK 17
    ```
 
    Räkna testerna i utskriften från `cargo test` (raderna `test result`). Prova gärna webbversionen (`dist/web/index.html`) i en webbläsare.
@@ -41,9 +43,9 @@ Taggen måste matcha `^v[0-9]+\.[0-9]+\.[0-9]+$` och versionen i `Cargo.toml` m�
    ```
 
 7. **PR till main:** kort engelsk sammanfattning, testantal, och avsluta med sessionens attributionsrader.
-8. **Merge** med merge commit (inte squash/rebase) när testerna är gröna.
-9. **Verifiera releasen:** arbetsflödet "Release" körs på mergecommiten (ca 10–15 min). Vänta inte med sleep; schemalägg en återkoll. Kontrollera sedan att releasen `vX.Y.Z` finns och att båda filerna är uppladdade. Misslyckades jobbet: läs loggen, fixa på en ny gren, ny PR. Taggen kan köras om manuellt via workflow_dispatch.
-10. **Rapportera till ägaren på svenska:** länk till releasen (`https://github.com/felixarvid2/krabba-spelet-rust/releases/tag/vX.Y.Z`), direktlänkar till filerna (`…/releases/download/vX.Y.Z/krabba-spelet-vX.Y.Z-webb.zip` och `…/krabba-spelet_X.Y.Z_amd64.deb`) och vad som är nytt i korthet.
+8. **Merge:** ägaren har gett stående godkännande att slå ihop när testerna är gröna. Slå ihop med merge commit (inte squash/rebase), med hela 40-teckens-SHA:n för huvudet (`git rev-parse HEAD`).
+9. **Verifiera releasen:** arbetsflödet "Release" körs på mergecommiten (ca 10–15 min). Vänta inte med sleep; schemalägg en återkoll. Kontrollera sedan att releasen `vX.Y.Z` finns och att alla tre filerna är uppladdade. Misslyckades jobbet: läs loggen, fixa på en ny gren, ny PR. Taggen kan köras om manuellt via workflow_dispatch.
+10. **Rapportera till ägaren på svenska:** länk till releasen (`https://github.com/felixarvid2/krabba-spelet-rust/releases/tag/vX.Y.Z`), direktlänkar till filerna (`…/releases/download/vX.Y.Z/krabba-spelet-vX.Y.Z-webb.zip`, `…/krabba-spelet_X.Y.Z_amd64.deb` och `…/krabba-spelet-vX.Y.Z.apk`), och vad som bara kan testas på en riktig Android-enhet och vad som är nytt i korthet.
 
 ## Regler
 
