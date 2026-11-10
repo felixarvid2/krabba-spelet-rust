@@ -202,6 +202,10 @@ pub struct World {
     cache: HashMap<(u8, u8, u8, bool, bool), Rc<Cv>>,
     labels: Vec<Label>,
     door_open: f64,
+    /// Ljud: steg-ackumulator, förra zonen, dörrar som var öppna
+    step_acc: f64,
+    last_zone: String,
+    door_was: bool,
     pops: Vec<Pop>,
     link_snap: Vec<(String, String, LinkState)>,
     has_mini: bool,
@@ -286,6 +290,9 @@ impl World {
             cache: HashMap::new(),
             labels: vec![],
             door_open: 0.0,
+            step_acc: 0.0,
+            last_zone: String::new(),
+            door_was: false,
             pops: vec![],
             link_snap: vec![],
             has_mini: false,
@@ -692,7 +699,37 @@ impl World {
         let dd = (self.pos.0 - 10.5).hypot(self.pos.1 + 10.1);
         let want = if self.cur == 0 && dd < 2.2 { 1.0 } else { 0.0 };
         self.door_open += (want - self.door_open) * (dt * 6.0).min(1.0);
+        self.update_sound(blocked);
         events
+    }
+
+    /// Underlägg: väder, rumston, fläktar, dörrar och zonbyte (som extra2d.js/world2d.js)
+    fn update_sound(&mut self, covered: bool) {
+        use crate::engine::audio;
+        let zn = self.zone_name();
+        let out = zn.contains("Utanför");
+        let regn = self.weather() == "regn";
+        audio::loop_level("rain", if regn && !covered { if out { 1.0 } else { 0.3 } } else if regn { 0.15 } else { 0.0 });
+        let amb = if covered { 0.2 } else if out { 0.15 } else if zn == "Serverrummet" { 0.2 } else { 1.0 };
+        let (on, off) = if self.cur == 1 { ("warehouse", "office") } else { ("office", "warehouse") };
+        audio::loop_level(on, amb as f32);
+        audio::loop_level(off, 0.0);
+        let mut near = 99.0f64;
+        for r in &self.sites[self.cur].racks {
+            near = near.min((self.pos.0 - r.x).hypot(self.pos.1 - r.z));
+        }
+        audio::loop_level("hum", if covered { 0.0 } else { (1.0 - near / 7.0).clamp(0.0, 1.0) as f32 });
+        let open = self.door_open > 0.15;
+        if open && !self.door_was {
+            audio::sfx("doorSlide");
+        }
+        self.door_was = open;
+        if zn != self.last_zone {
+            if !self.last_zone.is_empty() {
+                audio::sfx(if zn == "Serverrummet" { "pop" } else { "zone" });
+            }
+            self.last_zone = zn;
+        }
     }
 
     fn queue_walk(&mut self, x: f64, z: f64) {
@@ -831,6 +868,19 @@ impl World {
         } else {
             self.anim_t += dt * speed * 2.2;
             self.frame = (self.anim_t.floor() as i64).rem_euclid(4) as u8;
+            self.step_acc += dt * speed;
+            if self.step_acc > 0.8 {
+                self.step_acc = 0.0;
+                let zn = self.zone_name();
+                let surf = match zn.as_str() {
+                    "Serverrummet" => "metal",
+                    "Fikarummet" | "Receptionen" | "Lagerkontoret" => "wood",
+                    "Lagret i Borås" => "concrete",
+                    z if z.contains("Utanför") => "concrete",
+                    _ => "carpet",
+                };
+                crate::engine::audio::sfx_step(surf);
+            }
         }
         if let Some(c) = arrived {
             self.face_to(c.x, c.z);

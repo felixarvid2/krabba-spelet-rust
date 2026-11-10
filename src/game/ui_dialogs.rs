@@ -39,6 +39,13 @@ pub fn blocks_to_items(blocks: &[Block]) -> Vec<Item> {
     v
 }
 
+/// Nivåer för volymreglagen
+pub const LEVELS: [f32; 11] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+
+fn level_idx(v: f32) -> usize {
+    LEVELS.iter().enumerate().min_by(|a, b| (a.1 - v).abs().partial_cmp(&(b.1 - v).abs()).unwrap()).map(|x| x.0).unwrap_or(6)
+}
+
 impl App {
     // ------------------------------------------------------------------ briefing och paus
 
@@ -696,6 +703,13 @@ impl App {
             .item(Item::Check { id: "hud", label: "Visa HUD (U växlar)".into(), on: s.hud })
             .item(Item::Choice { id: "weather", label: "Väder".into(), options: vec!["Varierar".into(), "Alltid sol".into()], sel: if s.weather == "sol" { 1 } else { 0 } })
             .item(Item::Check { id: "mini", label: "Visa minikartan (K växlar)".into(), on: s.minimap })
+            .item(Item::Check { id: "sound", label: "Ljud på".into(), on: s.sound })
+            .item(Item::Choice { id: "vol", label: "Volym".into(), options: LEVELS.iter().map(|x| format!("{} %", (x * 100.0).round())).collect(), sel: level_idx(s.volume) })
+            .item(Item::Check { id: "typesnd", label: "Skrivljud i terminalen".into(), on: s.type_sound })
+            .item(Item::Check { id: "music", label: "Musik".into(), on: s.music })
+            .item(Item::Choice { id: "mvol", label: "Musikvolym".into(), options: LEVELS.iter().map(|x| format!("{} %", (x * 100.0).round())).collect(), sel: level_idx(s.music_vol) })
+            .item(Item::Choice { id: "fx", label: "Effekter".into(), options: LEVELS.iter().map(|x| format!("{} %", (x * 100.0).round())).collect(), sel: level_idx(s.fx) })
+            .item(Item::Choice { id: "amb", label: "Miljöljud".into(), options: LEVELS.iter().map(|x| format!("{} %", (x * 100.0).round())).collect(), sel: level_idx(s.ambience) })
             .tone("Lätt: ledtrådar kostar inga poäng. Svår: ingen pil, markör eller utropstecken, och fel måste bevisas med ett kommando. XP ×1,5.", Tone::Muted)
             .btn(Btn::primary("Klar", Act::SettingsApply))
             .btn(Btn::new("Avbryt", Act::Close))
@@ -713,6 +727,15 @@ impl App {
         self.save.settings.hud = d.checked("hud");
         self.save.settings.minimap = d.checked("mini");
         self.save.settings.weather = if d.choice("weather") == 1 { "sol".into() } else { "auto".into() };
+        let s = &mut self.save.settings;
+        s.sound = d.checked("sound");
+        s.volume = LEVELS[d.choice("vol").min(LEVELS.len() - 1)];
+        s.type_sound = d.checked("typesnd");
+        s.music = d.checked("music");
+        s.music_vol = LEVELS[d.choice("mvol").min(LEVELS.len() - 1)];
+        s.fx = LEVELS[d.choice("fx").min(LEVELS.len() - 1)];
+        s.ambience = LEVELS[d.choice("amb").min(LEVELS.len() - 1)];
+        crate::engine::audio::set_settings(s.audio());
         self.apply_weather();
         self.term.font = self.save.settings.term_font as f32;
         self.term.theme = self.save.settings.term_theme.clone();
@@ -822,6 +845,7 @@ impl App {
             let q = self.quiz.as_ref().unwrap();
             q.i + 1 >= q.items.len()
         };
+        crate::engine::audio::sfx(if ok { "success" } else { "fail" });
         let mut fb = Dialog::new(if ok { "Rätt!" } else { "Inte riktigt" });
         fb = if ok { fb.tone("Rätt svar!", Tone::Good) } else { fb.tone(format!("Rätt svar är: {}", correct_text), Tone::Bad) };
         if !explain.is_empty() {

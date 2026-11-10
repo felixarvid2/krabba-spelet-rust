@@ -1,6 +1,6 @@
 [package]
 name = "krabba_spelet"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2024"
 
 [lib]
@@ -15,6 +15,7 @@ serde_json = "1.0.154"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 minifb = "0.29.0"
+cpal = "0.15"
 
 [profile.release]
 opt-level = 3

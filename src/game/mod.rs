@@ -220,6 +220,10 @@ pub struct App {
     /// Beviset för en uppgift i svårt läge (byts mot en fejk i tester)
     pub verify_fn: fn(&str) -> levels::Verify,
     pub matches_fn: fn(&levels::Verify, &str, &str) -> bool,
+    /// Ljudspårning: antal överlägg, terminalen öppen, sekund för larmet
+    snd_ov: usize,
+    snd_term: bool,
+    snd_sec: i64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -261,7 +265,11 @@ impl App {
             minimap_rect: ui_widgets::Rect::default(),
             verify_fn: levels::verify,
             matches_fn: levels::verify_matches,
+            snd_ov: 0,
+            snd_term: false,
+            snd_sec: -1,
         };
+        engine::audio::set_settings(app.save.settings.audio());
         let nanos = crate::net::util::now_ms();
         app.tip = (nanos % handbook_data::TIPS.len() as u64) as usize;
         app
@@ -639,6 +647,7 @@ impl App {
             s.report = Some(r);
             run.last_progress = run.elapsed;
         }
+        engine::audio::sfx(if score >= 2 { "success" } else { "fail" });
         self.on_report(score);
         self.refresh_markers();
         self.check_tasks();
@@ -898,6 +907,13 @@ impl App {
         if self.run.as_ref().map(|r| r.sec_acc >= 1.0).unwrap_or(false) {
             self.run.as_mut().unwrap().sec_acc -= 1.0;
             self.housekeeping();
+            // Larm från övervakningen vid broadcaststorm när man är i serverrummet
+            if let Some(run) = self.run.as_mut() {
+                let storm = !S::get(&mut run.st).storm.is_empty();
+                if storm && run.world.zone_name() == "Serverrummet" && (run.st.time.floor() as i64) % 3 == 0 {
+                    engine::audio::sfx("alarm");
+                }
+            }
         }
         // loggrader till terminalen
         {
@@ -1130,6 +1146,7 @@ impl App {
             }
             WorldEvent::Travel(site) => self.travel(&site),
             WorldEvent::Pickup(what) => {
+                engine::audio::sfx("pickup");
                 let w = what.to_lowercase();
                 if w.contains("mobil") || w.contains("phone") {
                     let d = self.phone_dialog();
@@ -1167,6 +1184,8 @@ impl App {
                 } else if w.contains("coffee") || w.contains("kaffe") {
                     self.drink_coffee();
                 } else if w.contains("water") || w.contains("vatten") {
+                    engine::audio::sfx("water");
+                    engine::audio::sfx("bubble");
                     self.toast("Uppfriskande! Glöm inte att dricka vatten mellan felsökningarna.", ToastKind::Info);
                 } else if w.contains("printer") || w.contains("skrivare") {
                     self.print_page();
@@ -1184,6 +1203,7 @@ impl App {
                 None => return,
             };
             let ok = if run.st.devices.contains_key("PC-Lisa") { S::ping(&mut run.st, "PC-Lisa", "192.168.1.11", Default::default()).ok } else { true };
+            engine::audio::sfx(if ok { "printer" } else { "fail" });
             if !ok {
                 "Skrivaren svarar inte. Något i nätet är trasigt mellan kontoret och skrivaren.".to_string()
             } else {
@@ -1195,6 +1215,7 @@ impl App {
     }
 
     fn travel(&mut self, site: &str) {
+        engine::audio::sfx("honk");
         self.stat("trips");
         if let Some(run) = &mut self.run {
             run.world.set_site(site);
@@ -1485,6 +1506,9 @@ impl engine::Game for App {
             t.ttl -= dt;
         }
         self.toasts.retain(|t| t.ttl > 0.0);
+        if input.clicked && (self.screen == Screen::Menu || !self.overlays.is_empty()) {
+            engine::audio::sfx("click");
+        }
         match self.screen {
             Screen::Menu => self.update_menu(input),
             Screen::Play => {
@@ -1496,6 +1520,7 @@ impl engine::Game for App {
                 }
             }
         }
+        self.update_sound();
         if self.quit {
             self.autosave_on_quit();
         }
@@ -1547,6 +1572,30 @@ impl engine::Game for App {
 }
 
 impl App {
+    /// Öppna/stäng-ljud för dialoger och terminalen
+    fn update_sound(&mut self) {
+        let n = self.overlays.len();
+        if n > self.snd_ov {
+            engine::audio::sfx("open");
+        } else if n < self.snd_ov {
+            engine::audio::sfx("close");
+        }
+        self.snd_ov = n;
+        if self.term.open != self.snd_term {
+            engine::audio::sfx(if self.term.open { "crt" } else { "close" });
+            if self.term.open {
+                engine::audio::sfx("open");
+            }
+            self.snd_term = self.term.open;
+        }
+        // I menyn är världens ljud tysta
+        if self.screen == Screen::Menu {
+            for l in ["hum", "rain", "office", "warehouse", "vacuum"] {
+                engine::audio::loop_level(l, 0.0);
+            }
+        }
+    }
+
     fn autosave_on_quit(&mut self) {
         if self.screen == Screen::Play {
             self.save.run = self.saved_run_of();

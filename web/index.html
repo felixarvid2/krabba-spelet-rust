@@ -77,6 +77,26 @@
     window.addEventListener('mouseup', function (e) { ex.kb_button(e.button, 0); });
     cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     cv.addEventListener('wheel', function (e) { ex.kb_wheel(e.deltaY < 0 ? 1 : -1); e.preventDefault(); }, { passive: false });
+    // Ljud: Web Audio startas vid första klick eller tangent (webbläsarna kräver det)
+    var actx = null;
+    function startAudio() {
+      if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      try { actx = new AC({ sampleRate: 44100 }); } catch (e) { try { actx = new AC(); } catch (e2) { return; } }
+      ex.kb_audio_unlock();
+      var node = actx.createScriptProcessor(2048, 0, 2);
+      var ratio = 44100 / actx.sampleRate;
+      node.onaudioprocess = function (ev) {
+        var L = ev.outputBuffer.getChannelData(0), R = ev.outputBuffer.getChannelData(1), n = L.length;
+        var need = Math.ceil(n * ratio) + 1;
+        var p = ex.kb_audio(need), buf = new Float32Array(mem.buffer, p, need * 2);
+        for (var i = 0; i < n; i++) { var j = Math.min(need - 1, Math.floor(i * ratio)); L[i] = buf[j * 2]; R[i] = buf[j * 2 + 1]; }
+      };
+      node.connect(actx.destination);
+    }
+    window.addEventListener('keydown', startAudio, true);
+    window.addEventListener('mousedown', startAudio, true);
     var last = performance.now();
     function frame(now) {
       var dt = Math.min(0.1, (now - last) / 1000); last = now;

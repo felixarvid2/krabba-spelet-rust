@@ -19,7 +19,7 @@ Du behöver [Rust](https://rustup.rs) (stabil, 2024-utgåvan).
 cargo run --release
 ```
 
-På Linux behövs X11- eller Wayland-biblioteken (`libx11-dev`, `libxkbcommon-dev` eller motsvarande). Windows och macOS fungerar utan extra paket.
+På Linux behövs X11- eller Wayland-biblioteken och ALSA (`libx11-dev`, `libxkbcommon-dev`, `libasound2-dev` eller motsvarande). Windows och macOS fungerar utan extra paket.
 
 Framsteg, inställningar, anteckningar och terminalhistorik sparas i `~/.krabba-spelet/save.json` (Windows: `%APPDATA%\krabba-spelet\save.json`). Miljövariabeln `KRABBA_SAVE` pekar om filen.
 
@@ -43,6 +43,7 @@ tools/build-deb.sh     # dist/krabba-spelet_<version>_amd64.deb
 - **Svårighetsgrad** (Inställningar): Lätt, Normal eller Svår. I svårt läge säger spelet inte till när ett fel är löst – du måste bevisa det, till exempel genom att pinga från rätt dator eller visa rätt `show`-utdata. Ärendelistan (Tab) visar vad som räknas som bevis. Ingen kompasspil och 1,5 gånger XP.
 - **Karriär** (J): XP, rang och 50 prestationer. Veckoutmaningar, kaffe som gör dig snabbare och Krabban som gömmer sig nära ett av veckans fel – fånga den för en ledtråd.
 - **Liv i kontoret**: kollegorna går omkring, katten, ankorna, duvorna och måsen, dag, kväll och natt, sol, moln och regn.
+- **Ljud**: syntetiserade ljud som i originalet – fotsteg efter golv, fläktar, regn, kontorssorl, terminalknatter, djur och bakgrundsmusik. Ställs in under Inställningar.
 
 Varje fel är simulerat på riktigt: symptomen räknas fram ur konfigurationen (länkar, duplex, VLAN, STP, routing, OSPF, BGP, ARP, ACL, NAT, DHCP, DNS, PoE, port security, IPsec, MTU och lastbalansering). Ett fel försvinner bara när orsaken är rättad.
 
@@ -72,7 +73,8 @@ I terminalen fungerar `?`, Tab, ↑/↓, Ctrl+C, Ctrl+Z, Ctrl+A K (stäng `scree
 
 ```
 src/
-  engine/        Krabbmotorn: pixelbuffert, sprites, text (VT323, Press Start 2P), fönster (minifb), webbläsare (web.rs), PNG
+  engine/        Krabbmotorn: pixelbuffert, sprites, text (VT323, Press Start 2P), ljudsynth (audio.rs, cpal/Web Audio),
+                 fönster (minifb), webbläsare (web.rs), PNG
   net/           nätmodellen (model.rs), simulatorn (sim.rs) och OSPF/BGP (dynroute.rs)
   cli/           Cisco IOS (ios*.rs), Windows/Linux (host*.rs), WLC (wlc.rs), lastbalanseraren (lb.rs)
   game/          veckorna (levels*.rs), 2D-världen (world*.rs, art.rs), terminalen, dialoger, handbok, sparning

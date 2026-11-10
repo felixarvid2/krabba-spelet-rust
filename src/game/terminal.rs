@@ -540,6 +540,7 @@ impl Terminal {
                 if let Some(t) = self.stack.last_mut() {
                     t.started = true;
                     if t.session.booting() {
+                        crate::engine::audio::sfx("boot");
                         t.session.finish_boot(env.st);
                     }
                 }
@@ -1036,6 +1037,7 @@ impl Terminal {
                 if self.busy {
                     break;
                 }
+                crate::engine::audio::sfx("key");
                 if *ch == '?' {
                     let can_help = self.top().map(|t| t.ios && !t.session.secret_input() && t.started && !t.garbled).unwrap_or(false);
                     if can_help {

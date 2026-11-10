@@ -78,6 +78,8 @@ fn set_clipboard(text: &str) {
 #[cfg(not(target_arch = "wasm32"))]
 /// Öppnar ett fönster och kör spelet med ~60 bilder per sekund.
 pub fn run(title: &str, game: &mut dyn Game) {
+    // Ljudet startas i en egen ström; utan ljudenhet blir det tyst
+    let _sound = super::sound_out::start();
     let opts = WindowOptions {
         resize: true,
         scale: Scale::X1,

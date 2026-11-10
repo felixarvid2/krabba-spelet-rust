@@ -74,6 +74,9 @@ impl App {
             return;
         }
         let up = self.save.career.add_xp(n, why);
+        if n > 0 {
+            crate::engine::audio::sfx(if up.is_some() { "levelUp" } else { "xp" });
+        }
         if let Some(r) = &mut self.run {
             r.x.week_xp += n;
         }
@@ -94,6 +97,9 @@ impl App {
         let p = self.progress_info();
         let before = self.save.career.rank().0;
         let got = self.save.career.check(&p);
+        if !got.is_empty() {
+            crate::engine::audio::sfx("achievement");
+        }
         for a in got {
             self.toasts.push(super::Toast { text: format!("Prestation: {} – {}", a.name, a.desc), ttl: 8.0, kind: ToastKind::Good });
             if self.toasts.len() > 5 {
@@ -243,6 +249,7 @@ impl App {
         } else {
             format!("{} är löst! Skriv felrapporten med F.", title)
         };
+        crate::engine::audio::sfx("success");
         self.toast(msg, ToastKind::Good);
         // XP och kombo
         self.stat("fixed");
@@ -373,6 +380,7 @@ impl App {
             r.x.coffee_xp = true;
             f
         };
+        crate::engine::audio::sfx("pour");
         self.stat("coffees");
         self.toast(format!("Kaffe! Du går {} % snabbare i {} sekunder.", ((COFFEE_MULT - 1.0) * 100.0).round(), COFFEE_SECS as i32), ToastKind::Good);
         if first {
@@ -422,6 +430,7 @@ impl App {
                 _ => " Den verkar ha varit sysslolös den här veckan.".to_string(),
             }
         };
+        crate::engine::audio::sfx("success");
         self.stat("crabs");
         self.toast(format!("Du fångade Krabban!{}", note), ToastKind::Good);
         self.xp(75, "Krabban fångad");
@@ -733,5 +742,73 @@ impl App {
     fn housekeeping_for_test(&mut self) {
         self.check_tasks();
         self.career_tick();
+    }
+}
+
+#[cfg(test)]
+mod sound_tests {
+    use super::*;
+    use crate::engine::{audio, Input, Key};
+    use crate::engine::Game;
+    use crate::game::ui_save::SaveData;
+
+    fn peak() -> f32 {
+        let mut buf = vec![0f32; 2 * 4410];
+        audio::render(&mut buf);
+        buf.iter().fold(0f32, |a, b| a.max(b.abs()))
+    }
+
+    #[test]
+    fn spelet_ger_ljud_och_tystnar() {
+        unsafe {
+            std::env::set_var("KRABBA_SAVE", std::env::temp_dir().join("krabba-test-save-ljud.json"));
+        }
+        let mut a = App::new();
+        a.save = SaveData::default();
+        audio::unlock();
+        audio::set_settings(a.save.settings.audio());
+        a.start_week(1, false);
+        a.overlays.clear();
+        peak();
+        // gå ett tag: fotsteg och rumston
+        let mut best = 0f32;
+        for _ in 0..120 {
+            let mut i = Input::default();
+            i.down.insert(Key::D);
+            a.update(&i, 1.0 / 60.0);
+            best = best.max(peak());
+        }
+        assert!(best > 0.001, "fotsteg ger ljud: {best}");
+        // öppna terminalen och skriv
+        let mut t = Input::default();
+        t.pressed.push(Key::T);
+        a.update(&t, 1.0 / 60.0);
+        let mut best = peak();
+        for c in "help".chars() {
+            let mut i = Input::default();
+            i.chars.push(c);
+            a.update(&i, 1.0 / 60.0);
+            best = best.max(peak());
+        }
+        assert!(best > 0.001, "terminal ger ljud: {best}");
+        // ljud av: tyst
+        a.save.settings.sound = false;
+        for _ in 0..30 {
+            let mut i = Input::default();
+            i.down.insert(Key::A);
+            a.update(&i, 1.0 / 60.0);
+        }
+        audio::set_settings(a.save.settings.audio());
+        assert_eq!(peak(), 0.0);
+        audio::set_settings(crate::game::ui_save::Settings::default().audio());
+    }
+
+    #[test]
+    fn inställningar_sparas_och_tolkas() {
+        let s: crate::game::ui_save::Settings = serde_json::from_str("{\"difficulty\":\"hard\"}").unwrap();
+        assert!(s.sound && !s.music && s.type_sound);
+        assert!((s.volume - 0.6).abs() < 1e-6 && s.fx == 1.0 && s.ambience == 1.0);
+        let a = s.audio();
+        assert!(a.sound && (a.volume - 0.6).abs() < 1e-6);
     }
 }
