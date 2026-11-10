@@ -1,0 +1,129 @@
+name: Release
+
+# Bygger och publicerar en release av Krabba spelet.
+# Vanliga vägen: en push till main som ändrar docs/releases/vX.Y.Z.md (när release-PR:en slås ihop).
+# Även: push av en tagg vX.Y.Z, eller manuellt med en taggparameter.
+on:
+  push:
+    branches: [main]
+    paths: ['docs/releases/v*.md']
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tagg att släppa, t.ex. v1.0.0'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # 22.04 ger glibc 2.35, så .deb-paketet fungerar på Ubuntu 22.04 / Debian 12 och nyare
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bestäm taggen
+        id: tag
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -eu
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          elif [ "${GITHUB_REF#refs/tags/}" != "$GITHUB_REF" ]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            if [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then BEFORE="$AFTER~1"; fi
+            TAG=$(git diff --name-only --diff-filter=AM "$BEFORE" "$AFTER" -- 'docs/releases/v*.md' \
+              | sed -n 's#^docs/releases/\(v[0-9]*\.[0-9]*\.[0-9]*\)\.md$#\1#p' | sort -V | tail -n1)
+          fi
+          echo "Tagg: '$TAG'"
+          if ! echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Taggen '$TAG' matchar inte vX.Y.Z"; exit 1
+          fi
+          if [ ! -f "docs/releases/$TAG.md" ]; then
+            echo "::error::docs/releases/$TAG.md saknas"; exit 1
+          fi
+          VER="${TAG#v}"
+          CARGO=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "$CARGO" != "$VER" ]; then
+            echo "::error::Cargo.toml har version $CARGO men taggen är $TAG"; exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Systempaket
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libx11-dev libxcursor-dev libxkbcommon-dev libwayland-dev pkg-config zip
+
+      - name: Rust
+        run: |
+          rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
+          rustup default stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Tester
+        run: cargo test --release
+
+      - name: Bygg webbversionen
+        run: tools/build-web.sh
+
+      - name: Bygg .deb
+        run: tools/build-deb.sh
+
+      - name: Paketera
+        id: files
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          VER: ${{ steps.tag.outputs.ver }}
+        run: |
+          set -eu
+          cd dist
+          mv web krabba-spelet-webb
+          ZIP="krabba-spelet-$TAG-webb.zip"
+          zip -qr "$ZIP" krabba-spelet-webb
+          DEB="krabba-spelet_${VER}_amd64.deb"
+          test -f "$DEB"
+          dpkg-deb -I "$DEB" | grep -q "Version: $VER"
+          echo "zip=dist/$ZIP" >> "$GITHUB_OUTPUT"
+          echo "deb=dist/$DEB" >> "$GITHUB_OUTPUT"
+
+      - name: Publicera releasen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VER: ${{ steps.tag.outputs.ver }}
+          ZIP: ${{ steps.files.outputs.zip }}
+          DEB: ${{ steps.files.outputs.deb }}
+        run: |
+          set -eu
+          {
+            echo "**Spela:** packa upp \`krabba-spelet-$TAG-webb.zip\` och dubbelklicka på \`index.html\` (Chrome, Edge eller Firefox), eller installera på Ubuntu/Debian med \`sudo apt install ./krabba-spelet_${VER}_amd64.deb\`."
+            echo
+            cat "docs/releases/$TAG.md"
+          } > /tmp/notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" "$DEB" --clobber
+            gh release edit "$TAG" --title "Krabba spelet $TAG" --notes-file /tmp/notes.md
+          else
+            gh release create "$TAG" "$ZIP" "$DEB" --target "$GITHUB_SHA" --title "Krabba spelet $TAG" --notes-file /tmp/notes.md
+          fi
