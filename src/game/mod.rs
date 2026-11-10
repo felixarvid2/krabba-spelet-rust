@@ -8,6 +8,7 @@ pub mod levels;
 pub mod terminal;
 pub mod ui_dialog;
 pub mod ui_dialogs;
+pub mod ui_rack;
 pub mod ui_save;
 pub mod ui_screens;
 pub mod ui_widgets;
@@ -106,6 +107,7 @@ pub enum Screen {
 }
 
 pub enum Overlay {
+    Rack(ui_rack::RackView),
     Dlg(Dialog),
     Hand(Handbook),
 }
@@ -146,6 +148,7 @@ pub struct QuizRun {
 /// Skript för --headless-demo
 pub enum DemoCmd {
     ConsoleTo(String),
+    Rack(String),
 }
 
 pub struct App {
@@ -238,7 +241,8 @@ impl App {
     pub fn start_week(&mut self, n: u32, exam: bool) {
         let (st, week) = if n == 0 { (levels::base_state(10), None) } else { levels::start(n) };
         let site = week.as_ref().map(|w| w.site).unwrap_or("gbg");
-        let world = World::new(site, n);
+        let mut world = World::new(site, n);
+        world.set_week(n);
         let ts: Vec<TaskState> = week.as_ref().map(|w| w.tasks.iter().map(|t| TaskState { known: t.build, ..Default::default() }).collect()).unwrap_or_default();
         let guide = if n == 1 && self.save.stars(1) == 0 && !exam { 0 } else { -1 };
         let mut run = Run {
@@ -301,6 +305,7 @@ impl App {
         S::touch(&mut st);
         let ts: Vec<TaskState> = sr.tasks.iter().map(|t| TaskState { fixed: t.fixed, reported: t.reported, known: t.known, hints: t.hints, score: t.score, report: None }).collect();
         let mut world = World::new(&sr.site, sr.week);
+        world.set_week(sr.week);
         world.set_site(&sr.site);
         let mut run = Run {
             n: sr.week,
@@ -868,7 +873,6 @@ impl App {
         // demo-skript
         self.run_demo();
 
-        if self.frame % 20 == 0 || (self.frame > 10 && self.frame < 30) { eprintln!("f{} ov{} term{}", self.frame, self.overlays.len(), self.term.open); }
         // överlägg har företräde
         if !self.overlays.is_empty() {
             self.update_overlays(input);
@@ -1021,8 +1025,17 @@ impl App {
             }
             WorldEvent::Cable(id) => self.cable_event(&id),
             WorldEvent::Rack(name) => {
-                let d = self.rack_dialog(&name);
-                self.push_dlg(d);
+                if let Some(run) = &self.run {
+                    let ids = run.world.rack_units(&name);
+                    let title = match name.as_str() {
+                        "A" => "Rack A – nät",
+                        "B" => "Rack B – servrar",
+                        "Molndal" => "Mölndals rack",
+                        _ => "Lagrets rack",
+                    };
+                    let rv = ui_rack::RackView::new(title, &ids, &run.st);
+                    self.overlays.push(Overlay::Rack(rv));
+                }
             }
             WorldEvent::Travel(site) => self.travel(&site),
             WorldEvent::Pickup(what) => {
@@ -1147,6 +1160,16 @@ impl App {
             None => return,
         };
         match top {
+            Overlay::Rack(r) => {
+                r.update(input);
+                if r.closed {
+                    let pick = r.pick.take();
+                    self.overlays.pop();
+                    if let Some(id) = pick {
+                        self.connect_console(&id);
+                    }
+                }
+            }
             Overlay::Hand(h) => {
                 h.update(input);
                 if let Some(c) = h.clip.take() {
@@ -1220,6 +1243,7 @@ impl App {
             if self.demo[i].0 <= f {
                 let (_, cmd) = self.demo.remove(i);
                 match cmd {
+                    DemoCmd::Rack(n) => self.handle_world_event(WorldEvent::Rack(n)),
                     DemoCmd::ConsoleTo(id) => {
                         let id = if self.run.as_ref().map(|r| r.st.devices.contains_key(&id)).unwrap_or(false) { id } else { "SW1".to_string() };
                         self.connect_console(&id);
@@ -1359,6 +1383,11 @@ impl engine::Game for App {
         let t = self.time;
         for o in &mut self.overlays {
             match o {
+                Overlay::Rack(r) => {
+                    if let Some(run) = &mut self.run {
+                        r.draw(c, fonts, &mut run.st, mouse, t);
+                    }
+                }
                 Overlay::Dlg(d) => d.draw(c, fonts, mouse, t),
                 Overlay::Hand(h) => h.draw(c, fonts, mouse),
             }
@@ -1381,6 +1410,7 @@ impl App {
 
     fn draw_play(&mut self, c: &mut Canvas, fonts: &mut Fonts) {
         if let Some(run) = &mut self.run {
+            run.world.sync(&mut run.st);
             run.world.draw(c, fonts, &run.st);
         }
         if self.save.settings.hud {
@@ -1435,11 +1465,11 @@ pub fn headless_demo(dir: &str) {
         i
     };
     wait(&mut inputs, 10);
-    shots.push((inputs.len(), format!("{}/01-meny.png", dir)));
+    shots.push((inputs.len().saturating_sub(1), format!("{}/01-meny.png", dir)));
     inputs.push(blank());
     inputs.push(key(Key::Num1));
     wait(&mut inputs, 10);
-    shots.push((inputs.len(), format!("{}/02-intro.png", dir)));
+    shots.push((inputs.len().saturating_sub(1), format!("{}/02-intro.png", dir)));
     inputs.push(enter());
     wait(&mut inputs, 5);
     // gå runt
@@ -1453,7 +1483,7 @@ pub fn headless_demo(dir: &str) {
         i.down.insert(Key::S);
         inputs.push(i);
     }
-    shots.push((inputs.len(), format!("{}/03-varlden.png", dir)));
+    shots.push((inputs.len().saturating_sub(1), format!("{}/03-varlden.png", dir)));
     inputs.push(key(Key::T));
     wait(&mut inputs, 5);
     typed(&mut inputs, "help");
@@ -1462,7 +1492,7 @@ pub fn headless_demo(dir: &str) {
     typed(&mut inputs, "ping -c 2 192.168.1.193");
     inputs.push(enter());
     wait(&mut inputs, 120);
-    shots.push((inputs.len(), format!("{}/04-terminal.png", dir)));
+    shots.push((inputs.len().saturating_sub(1), format!("{}/04-terminal.png", dir)));
     // konsolen mot SW1
     inputs.push(key(Key::Escape));
     wait(&mut inputs, 3);
@@ -1480,32 +1510,67 @@ pub fn headless_demo(dir: &str) {
     wait(&mut inputs, 60);
     typed(&mut inputs, "show vlan ");
     inputs.push(key(Key::Tab));
-    shots.push((inputs.len(), format!("{}/05-konsol.png", dir)));
+    shots.push((inputs.len().saturating_sub(1), format!("{}/05-konsol.png", dir)));
     wait(&mut inputs, 3);
+    // Ctrl+A K stänger screen, sedan rätt hastighet
+    let mut ca = Input::default();
+    ca.ctrl = true;
+    ca.down.insert(Key::Ctrl);
+    ca.pressed.push(Key::A);
+    inputs.push(ca);
+    inputs.push(key(Key::K));
+    wait(&mut inputs, 3);
+    let mut cu = Input::default();
+    cu.ctrl = true;
+    cu.down.insert(Key::Ctrl);
+    cu.pressed.push(Key::U);
+    inputs.push(cu);
+    typed(&mut inputs, "sudo screen /dev/ttyUSB0 19200");
+    inputs.push(enter());
+    wait(&mut inputs, 5);
+    inputs.push(enter());
+    wait(&mut inputs, 3);
+    inputs.push(enter());
+    wait(&mut inputs, 3);
+    typed(&mut inputs, "enable");
+    inputs.push(enter());
+    typed(&mut inputs, "show ip interface brief");
+    inputs.push(enter());
+    wait(&mut inputs, 10);
+    typed(&mut inputs, "conf");
+    inputs.push(key(Key::Tab));
+    typed(&mut inputs, "?");
+    wait(&mut inputs, 3);
+    shots.push((inputs.len().saturating_sub(1), format!("{}/05b-konsol-ok.png", dir)));
     let mut esc = Input::default();
     esc.pressed.push(Key::Escape);
     inputs.push(esc);
     wait(&mut inputs, 3);
     inputs.push(key(Key::F1));
     wait(&mut inputs, 3);
-    shots.push((inputs.len(), format!("{}/06-hjalp.png", dir)));
+    shots.push((inputs.len().saturating_sub(1), format!("{}/06-hjalp.png", dir)));
     inputs.push(key(Key::Escape));
     wait(&mut inputs, 3);
     inputs.push(key(Key::H));
     wait(&mut inputs, 3);
-    shots.push((inputs.len(), format!("{}/07-handbok.png", dir)));
+    shots.push((inputs.len().saturating_sub(1), format!("{}/07-handbok.png", dir)));
     inputs.push(key(Key::Tab));
     wait(&mut inputs, 3);
     inputs.push(key(Key::Escape));
     wait(&mut inputs, 3);
     inputs.push(key(Key::Tab));
     wait(&mut inputs, 3);
-    shots.push((inputs.len(), format!("{}/08-arenden.png", dir)));
+    shots.push((inputs.len().saturating_sub(1), format!("{}/08-arenden.png", dir)));
     inputs.push(key(Key::Escape));
     wait(&mut inputs, 3);
     inputs.push(key(Key::L));
     wait(&mut inputs, 3);
-    shots.push((inputs.len(), format!("{}/09-ledtrad.png", dir)));
+    shots.push((inputs.len().saturating_sub(1), format!("{}/09-ledtrad.png", dir)));
+    inputs.push(key(Key::Escape));
+    wait(&mut inputs, 3);
+    app.demo.push((inputs.len() as u64, DemoCmd::Rack("A".into())));
+    wait(&mut inputs, 5);
+    shots.push((inputs.len().saturating_sub(1), format!("{}/10-rack.png", dir)));
     wait(&mut inputs, 2);
     engine::run_headless(&mut app, &inputs, &shots);
 }

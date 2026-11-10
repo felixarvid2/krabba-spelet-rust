@@ -460,7 +460,6 @@ impl Dialog {
             y += line_h(BODY) + 6;
         }
         let content_h = y;
-        eprintln!("content_h {} screen {}x{}", content_h, screen_w, screen_h);
         let chrome = 56 + 64;
         let ph = (content_h + chrome + 16).min(screen_h - 40).max(200);
         let px = (screen_w - pw) / 2;

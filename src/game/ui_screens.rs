@@ -210,7 +210,7 @@ impl App {
             None => "Fri träning".to_string(),
         };
         let mut rows: Vec<(String, u32)> = vec![];
-        let place = if run.world.site == "boras" { "Lagret i Borås" } else if run.world.site == "molndal" { "Mölndal" } else { "Kontoret i Göteborg" };
+        let place = run.world.zone_name();
         let clock = if run.st.devices.contains_key("R1") { crate::net::sim::device_clock(&mut self.run.as_mut().unwrap().st, "R1").hms } else { String::new() };
         let run = self.run.as_ref().unwrap();
         let sub = format!("{} · {} · {}{}", place, clock.chars().take(5).collect::<String>(), esc_time(run.elapsed), if run.exam { " · EXAMEN" } else { "" });
