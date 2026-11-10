@@ -1,0 +1,15 @@
+Package: krabba-spelet
+Version: 1.0.0
+Section: games
+Priority: optional
+Architecture: amd64
+Depends: libc6 (>= 2.35), libgcc-s1, libx11-6, libxcursor1, libxkbcommon0
+Recommends: libwayland-client0, xclip | wl-clipboard
+Installed-Size: 8560
+Maintainer: felixarvid2 <felixarvid2@users.noreply.github.com>
+Homepage: https://github.com/felixarvid2/krabba-spelet-rust
+Description: Nätverksspel där du felsöker Cisco-utrustning via CLI
+ Krabba spelet: du är nätverkstekniker på Nordvik och felsöker veckans fel
+ i en simulerad Cisco-miljö (VLAN, STP, routing, OSPF, BGP, NAT, DHCP,
+ ACL, IPsec m.m.) i en 2D-pixelvärld. Kurs 1 vecka 1–10, fem byggen från
+ grunden och kurs 2 vecka 11–14.

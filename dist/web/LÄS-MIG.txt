@@ -1,0 +1,13 @@
+Krabba spelet – webbversion
+===========================
+
+Dubbelklicka på index.html. Spelet öppnas i webbläsaren (Chrome, Edge eller Firefox)
+och fungerar utan internet och utan installation.
+
+Framstegen sparas i webbläsaren (localStorage), separat för varje webbläsare.
+
+Fungerar det inte att öppna filen direkt kan du starta en liten webbserver i mappen:
+  python3 -m http.server
+och gå till http://localhost:8000
+
+Källkod: https://github.com/felixarvid2/krabba-spelet-rust

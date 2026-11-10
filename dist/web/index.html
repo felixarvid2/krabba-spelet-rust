@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Krabba spelet</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0d14; color: #cdd3e6; font-family: system-ui, sans-serif; }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; outline: none; max-width: 100vw; max-height: 100vh; aspect-ratio: 16 / 9; width: 100vw; height: auto; }
+  @media (min-aspect-ratio: 16/9) { canvas { width: auto; height: 100vh; } }
+  #msg { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 2em; font-size: 18px; line-height: 1.5; }
+  #msg b { color: #ffd34d; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c" width="1280" height="720" tabindex="0"></canvas></div>
+<div id="msg">🦀 Laddar Krabba spelet…</div>
+<!-- Spelet som base64 (byggs av tools/build-web.sh), så att sidan fungerar direkt från disken -->
+<script src="krabba_spelet.js"></script>
+<script>
+(function () {
+  var cv = document.getElementById('c'), cx = cv.getContext('2d'), msg = document.getElementById('msg');
+  var KEY = 'krabba-spelet.save';
+  var mem = null, ex = null, img = null;
+  function bytes(ptr, len) { return new Uint8Array(mem.buffer, ptr, len); }
+  var enc = new TextEncoder(), dec = new TextDecoder();
+  var loaded = null;
+  var env = {
+    js_now: function () { return Date.now(); },
+    js_save: function (p, n) { try { localStorage.setItem(KEY, dec.decode(bytes(p, n))); } catch (e) {} },
+    js_load_len: function () { try { loaded = enc.encode(localStorage.getItem(KEY) || ''); } catch (e) { loaded = new Uint8Array(0); } return loaded.length; },
+    js_load: function (p) { bytes(p, loaded.length).set(loaded); },
+    js_clipboard: function (p, n) { var t = dec.decode(bytes(p, n)); try { navigator.clipboard.writeText(t); } catch (e) {} },
+  };
+  // Samma ordning som code_key i src/engine/web.rs
+  var CODES = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+    'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'KeyF', 'KeyG', 'KeyH', 'KeyI', 'KeyJ', 'KeyK', 'KeyL', 'KeyM', 'KeyN',
+    'KeyO', 'KeyP', 'KeyQ', 'KeyR', 'KeyT', 'KeyU', 'KeyV', 'KeyX', 'KeyY', 'KeyZ', 'KeyB', 'KeyC',
+    'Digit0', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9',
+    'Enter', 'Escape', 'Tab', 'Backspace', 'Delete', 'Space', 'Home', 'End', 'PageUp', 'PageDown',
+    'Shift', 'Control', 'Alt', 'F1', 'F2', 'F3', 'F4', 'F5', 'F11'];
+  function codeOf(e) {
+    var c = e.code;
+    if (/^Shift/.test(c)) c = 'Shift'; else if (/^Control/.test(c)) c = 'Control'; else if (/^Alt/.test(c)) c = 'Alt';
+    else if (/^Numpad(\d)$/.test(c)) c = 'Digit' + c.slice(6); else if (c === 'NumpadEnter') c = 'Enter';
+    return CODES.indexOf(c);
+  }
+  function pos(e) {
+    var r = cv.getBoundingClientRect();
+    return [Math.floor((e.clientX - r.left) * 1280 / r.width), Math.floor((e.clientY - r.top) * 720 / r.height)];
+  }
+  function start(inst) {
+    ex = inst.exports; mem = ex.memory;
+    if (!ex.kb_start()) { msg.textContent = 'Spelet kunde inte starta.'; return; }
+    msg.style.display = 'none';
+    img = cx.createImageData(1280, 720);
+    cv.focus();
+    window.addEventListener('keydown', function (e) {
+      var k = codeOf(e);
+      // Låt webbläsaren sköta Ctrl+V/R och F12, men ta resten (Tab, F1, Ctrl+L …) till spelet
+      if (e.ctrlKey && (e.key === 'v' || e.key === 'r')) return;
+      if (e.key === 'F12') return;
+      if (k >= 0) ex.kb_key(k, 1);
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) ex.kb_char(e.key.codePointAt(0));
+      e.preventDefault();
+    });
+    window.addEventListener('keyup', function (e) { var k = codeOf(e); if (k >= 0) ex.kb_key(k, 0); e.preventDefault(); });
+    window.addEventListener('paste', function (e) {
+      var t = (e.clipboardData || window.clipboardData).getData('text') || '';
+      for (var ch of t.replace(/\r?\n/g, ' ')) ex.kb_char(ch.codePointAt(0));
+      e.preventDefault();
+    });
+    window.addEventListener('blur', function () { for (var i = 0; i < CODES.length; i++) ex.kb_key(i, 0); });
+    cv.addEventListener('mousemove', function (e) { var p = pos(e); ex.kb_mouse(p[0], p[1]); });
+    cv.addEventListener('mousedown', function (e) { cv.focus(); var p = pos(e); ex.kb_mouse(p[0], p[1]); ex.kb_button(e.button, 1); e.preventDefault(); });
+    window.addEventListener('mouseup', function (e) { ex.kb_button(e.button, 0); });
+    cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    cv.addEventListener('wheel', function (e) { ex.kb_wheel(e.deltaY < 0 ? 1 : -1); e.preventDefault(); }, { passive: false });
+    var last = performance.now();
+    function frame(now) {
+      var dt = Math.min(0.1, (now - last) / 1000); last = now;
+      var p = ex.kb_frame(dt);
+      if (!p) { msg.style.display = 'flex'; msg.innerHTML = 'Tack för att du spelade <b>Krabba spelet</b>! Ladda om sidan för att spela igen.'; return; }
+      img.data.set(new Uint8Array(mem.buffer, p, 1280 * 720 * 4));
+      cx.putImageData(img, 0, 0);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+  function fail(e) {
+    msg.innerHTML = 'Kunde inte ladda spelet (' + e + ').<br><br>Webbläsare får inte läsa .wasm-filer direkt från disken.<br>Starta en liten webbserver i mappen, t.ex. <b>python3 -m http.server</b>, och öppna <b>http://localhost:8000</b>.<br>Eller dubbelklicka på <b>starta.bat</b> / <b>starta.sh</b>.';
+  }
+  // Inbäddad wasm (krabba_spelet.js) fungerar även direkt från disken
+  if (window.KRABBA_WASM_B64) {
+    var bin = Uint8Array.from(atob(window.KRABBA_WASM_B64), function (c) { return c.charCodeAt(0); });
+    WebAssembly.instantiate(bin, { env: env }).then(function (r) { start(r.instance); }, fail);
+  } else {
+    fetch('krabba_spelet.wasm').then(function (r) { return r.arrayBuffer(); })
+      .then(function (b) { return WebAssembly.instantiate(b, { env: env }); })
+      .then(function (r) { start(r.instance); }, fail);
+  }
+})();
+</script>
+</body>
+</html>

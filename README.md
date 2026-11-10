@@ -4,7 +4,14 @@ Ett nätverksspel för kurserna *Nätverksteknik* och *Routing och switching*, s
 
 Det här är en Rust-port av 2D-delen av [Krabba-passet](https://github.com/felixarvid2/test/tree/main/natverksspel). 3D och HD-2D är borttagna. Spelet har en egen liten spelmotor (Krabbmotorn) som ritar allt i mjukvara.
 
-## Starta
+## Spela
+
+Ladda ner från [Releases](https://github.com/felixarvid2/krabba-spelet-rust/releases/latest):
+
+- **I webbläsaren:** packa upp `krabba-spelet-<version>-webb.zip` och dubbelklicka på `index.html`. Fungerar i Chrome, Edge och Firefox, utan internet och utan installation. Framstegen sparas i webbläsaren.
+- **Ubuntu/Debian:** `sudo apt install ./krabba-spelet_<version>_amd64.deb` och starta *Krabba spelet* från programmenyn (eller `krabba-spelet` i en terminal). Kräver Ubuntu 22.04, Debian 12 eller nyare.
+
+### Från källkoden
 
 Du behöver [Rust](https://rustup.rs) (stabil, 2024-utgåvan).
 
@@ -16,11 +23,22 @@ På Linux behövs X11- eller Wayland-biblioteken (`libx11-dev`, `libxkbcommon-de
 
 Framsteg, inställningar, anteckningar och terminalhistorik sparas i `~/.krabba-spelet/save.json` (Windows: `%APPDATA%\krabba-spelet\save.json`). Miljövariabeln `KRABBA_SAVE` pekar om filen.
 
+### Bygga releasefilerna
+
+```
+rustup target add wasm32-unknown-unknown
+tools/build-web.sh     # dist/web: index.html + spelet som WebAssembly
+tools/build-deb.sh     # dist/krabba-spelet_<version>_amd64.deb
+```
+
 ## Innehåll
 
 - **Kurs 1, vecka 1–10**: konsolen, ramar och MAC-adresser, IP och subnätning, VLAN och trunkar, routing, NAT och SSH, drift och övervakning, trådlöst, säkerhet och brandvägg, VPN och lastbalansering.
 - **Bygg från grunden 1–5**: fabriksinställda enheter som du konfigurerar steg för steg.
 - **Kurs 2, vecka 11–14**: nav och ekrar, brandvägg och VPN, OSPF, BGP med PAT och reservdefault.
+- **Svårighetsgrad** (Inställningar): Lätt, Normal eller Svår. I svårt läge säger spelet inte till när ett fel är löst – du måste bevisa det, till exempel genom att pinga från rätt dator eller visa rätt `show`-utdata. Ärendelistan (Tab) visar vad som räknas som bevis. Ingen kompasspil och 1,5 gånger XP.
+- **Karriär** (J): XP, rang och 50 prestationer. Veckoutmaningar, kaffe som gör dig snabbare och Krabban som gömmer sig nära ett av veckans fel – fånga den för en ledtråd.
+- **Liv i kontoret**: kollegorna går omkring, katten, ankorna, duvorna och måsen, dag, kväll och natt, sol, moln och regn.
 
 Varje fel är simulerat på riktigt: symptomen räknas fram ur konfigurationen (länkar, duplex, VLAN, STP, routing, OSPF, BGP, ARP, ACL, NAT, DHCP, DNS, PoE, port security, IPsec, MTU och lastbalansering). Ett fel försvinner bara när orsaken är rättad.
 
@@ -37,7 +55,9 @@ Varje fel är simulerat på riktigt: symptomen räknas fram ur konfigurationen (
 | L | Ledtråd |
 | H | Handbok: kommandon, felbibliotek, adressplan, subnätsräknare, OSI, ordlista |
 | Tab | Ärendelistan |
-| M | Karta med snabbresa |
+| M | Karta: klicka för att gå dit, snabbresa |
+| K | Minikarta |
+| J | Karriär och prestationer |
 | N | Anteckningar |
 | F1 | Hjälp |
 | Esc | Paus / stäng |
@@ -48,12 +68,14 @@ I terminalen fungerar `?`, Tab, ↑/↓, Ctrl+C, Ctrl+Z, Ctrl+A K (stäng `scree
 
 ```
 src/
-  engine/        Krabbmotorn: pixelbuffert, sprites, text (VT323, Press Start 2P), fönster (minifb), PNG
+  engine/        Krabbmotorn: pixelbuffert, sprites, text (VT323, Press Start 2P), fönster (minifb), webbläsare (web.rs), PNG
   net/           nätmodellen (model.rs), simulatorn (sim.rs) och OSPF/BGP (dynroute.rs)
   cli/           Cisco IOS (ios*.rs), Windows/Linux (host*.rs), WLC (wlc.rs), lastbalanseraren (lb.rs)
   game/          veckorna (levels*.rs), 2D-världen (world*.rs, art.rs), terminalen, dialoger, handbok, sparning
 tests/           simulatorn, veckorna och byggena, terminalerna, motorn och världen
-assets/fonts/    VT323 och Press Start 2P (SIL Open Font License)
+assets/          typsnitt (SIL Open Font License), ikon och .desktop-fil
+web/index.html   webbsidan som kör spelet som WebAssembly
+tools/           byggskript för webbversionen och .deb-paketet
 ```
 
 ### Tester

@@ -253,9 +253,9 @@ impl App {
         super::ui_career::draw_xp_bar(c, fonts, x + 12, y, w - 24, &self.save.career);
         y += line_h(SMALL) + 14;
         if hard {
-            let tw = text_w(fonts, "SVÅR", 10.0, FontKind::Pixel);
+            let tw = text_w(fonts, "SVÅR", 18.0, FontKind::Mono);
             c.fill_rect(x + w - tw - 24, 8 + 6, tw + 12, 20, rgb(0x8a, 0x1f, 0x1f));
-            fonts.text(c, x + w - tw - 18, 8 + 11, "SVÅR", 10.0, TEXT, FontKind::Pixel);
+            fonts.text(c, x + w - tw - 18, 8 + 7, "SVÅR", 18.0, TEXT, FontKind::Mono);
         }
         for (ls, col) in &wrapped {
             for l in ls {
@@ -318,6 +318,11 @@ impl App {
         let x = c.w as i32 - w - 12;
         let wrapped: Vec<Vec<String>> = self.toasts.iter().map(|t| fonts.wrap(&t.text, SMALL, FontKind::Mono, w - 20)).collect();
         let total: i32 = wrapped.iter().map(|ls| ls.len() as i32 * line_h(SMALL) + 18).sum();
+        // Med en dialog öppen hamnar notiserna överst så att de inte täcker knapparna
+        // Med en dialog öppen väntar notiserna tills den stängs
+        if !self.overlays.is_empty() {
+            return;
+        }
         let mut y = c.h as i32 - 48 - total;
         for (t, ls) in self.toasts.iter().zip(wrapped.iter()) {
             let h = ls.len() as i32 * line_h(SMALL) + 12;

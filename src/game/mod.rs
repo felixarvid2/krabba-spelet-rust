@@ -31,9 +31,18 @@ use ui_save::{SaveData, SavedRun, SavedTask};
 use world::{Mark, World, WorldEvent};
 
 /// Startar spelet i ett fönster.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run() {
     let mut app = App::new();
     engine::run("Krabba spelet", &mut app);
+}
+
+/// Webbläsaren: web/index.html anropar kb_start och sedan kb_frame varje bildruta.
+#[cfg(target_arch = "wasm32")]
+#[unsafe(no_mangle)]
+pub extern "C" fn kb_start() -> u32 {
+    engine::web::install(Box::new(App::new()));
+    engine::web::kb_init()
 }
 
 // ------------------------------------------------------------------ typer
@@ -253,7 +262,7 @@ impl App {
             verify_fn: levels::verify,
             matches_fn: levels::verify_matches,
         };
-        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos() as u64).unwrap_or(0);
+        let nanos = crate::net::util::now_ms();
         app.tip = (nanos % handbook_data::TIPS.len() as u64) as usize;
         app
     }
@@ -804,6 +813,9 @@ impl App {
             "Bra! Tryck F och skriv felrapporten.",
         ];
         let run = self.run.as_ref()?;
+        if self.save.settings.difficulty == "hard" {
+            return None;
+        }
         if run.guide >= 0 && (run.guide as usize) < G.len() {
             Some(G[run.guide as usize])
         } else {

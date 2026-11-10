@@ -5,6 +5,8 @@
 
 mod text;
 mod window;
+#[cfg(target_arch = "wasm32")]
+pub mod web;
 
 pub type Color = u32;
 
@@ -377,5 +379,7 @@ pub const HEIGHT: usize = 720;
 
 /// Öppnar ett fönster, kör spelet (~60 bilder/s): se window::run.
 /// Huvudlöst läge med PNG-skärmdumpar: window::run_headless.
-pub use window::{run, run_headless, save_png};
+pub use window::{run_headless, save_png};
+#[cfg(not(target_arch = "wasm32"))]
+pub use window::run;
 

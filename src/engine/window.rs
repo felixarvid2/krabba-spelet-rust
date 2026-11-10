@@ -1,11 +1,16 @@
 //! Fönster (minifb), huvudlöst läge och PNG-export.
 use super::*;
+#[cfg(not(target_arch = "wasm32"))]
 use minifb::{InputCallback, KeyRepeat, MouseButton, MouseMode, Scale, ScaleMode, Window, WindowOptions};
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::{Arc, Mutex};
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::{Duration, Instant};
 
+#[cfg(not(target_arch = "wasm32"))]
 struct CharSink(Arc<Mutex<Vec<char>>>);
 
+#[cfg(not(target_arch = "wasm32"))]
 impl InputCallback for CharSink {
     fn add_char(&mut self, uni_char: u32) {
         // Släpp styrtecken och macOS privata funktionstangentskoder
@@ -20,6 +25,7 @@ impl InputCallback for CharSink {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn map_key(k: minifb::Key) -> Option<Key> {
     use minifb::Key as M;
     Some(match k {
@@ -44,6 +50,7 @@ fn map_key(k: minifb::Key) -> Option<Key> {
     })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// Försöker lägga text i urklipp med vanliga systemverktyg; ignorerar fel.
 fn set_clipboard(text: &str) {
     use std::io::Write;
@@ -68,6 +75,7 @@ fn set_clipboard(text: &str) {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// Öppnar ett fönster och kör spelet med ~60 bilder per sekund.
 pub fn run(title: &str, game: &mut dyn Game) {
     let opts = WindowOptions {

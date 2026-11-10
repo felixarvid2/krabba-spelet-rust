@@ -104,12 +104,25 @@ pub fn save_path() -> PathBuf {
 
 impl SaveData {
     pub fn load() -> SaveData {
+        #[cfg(target_arch = "wasm32")]
+        {
+            return serde_json::from_str(&crate::engine::web::storage_load()).unwrap_or_default();
+        }
+        #[allow(unreachable_code)]
         match std::fs::read_to_string(save_path()) {
             Ok(s) => serde_json::from_str(&s).unwrap_or_default(),
             Err(_) => SaveData::default(),
         }
     }
     pub fn save(&self) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Ok(s) = serde_json::to_string(self) {
+                crate::engine::web::storage_save(&s);
+            }
+            return;
+        }
+        #[allow(unreachable_code)]
         let p = save_path();
         if let Some(d) = p.parent() {
             let _ = std::fs::create_dir_all(d);

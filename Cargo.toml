@@ -1,12 +1,20 @@
 [package]
 name = "krabba_spelet"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 fontdue = "0.9.5"
 indexmap = { version = "2.14.2", features = ["serde"] }
-minifb = "0.29.0"
 png = "0.18.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+minifb = "0.29.0"
+
+[profile.release]
+opt-level = 3
