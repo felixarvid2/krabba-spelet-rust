@@ -24,11 +24,26 @@ pub struct Settings {
     pub minimap: bool,
     /// "auto" (varierar) eller "sol"
     pub weather: String,
+    /// Ljud på/av och volymer (0–1)
+    pub sound: bool,
+    pub volume: f32,
+    pub type_sound: bool,
+    pub music: bool,
+    pub music_vol: f32,
+    pub fx: f32,
+    pub ambience: f32,
+}
+
+impl Settings {
+    /// Motsvarande inställningar för ljudmotorn
+    pub fn audio(&self) -> crate::engine::audio::Settings {
+        crate::engine::audio::Settings { sound: self.sound, volume: self.volume.clamp(0.0, 1.0), type_sound: self.type_sound, music: self.music, music_vol: self.music_vol.clamp(0.0, 1.0), fx: self.fx.clamp(0.0, 1.0), ambience: self.ambience.clamp(0.0, 1.0) }
+    }
 }
 
 impl Default for Settings {
     fn default() -> Settings {
-        Settings { difficulty: "normal".into(), term_font: 22, term_theme: "classic".into(), fast_output: false, show_keys: true, hud: true, minimap: true, weather: "auto".into() }
+        Settings { difficulty: "normal".into(), term_font: 22, term_theme: "classic".into(), fast_output: false, show_keys: true, hud: true, minimap: true, weather: "auto".into(), sound: true, volume: 0.6, type_sound: true, music: false, music_vol: 0.5, fx: 1.0, ambience: 1.0 }
     }
 }
 

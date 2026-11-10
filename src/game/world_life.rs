@@ -499,6 +499,7 @@ impl World {
                     }
                     if meow <= 0.0 && near < 1.6 {
                         meow = 8.0 + (a.ph * 5.3) % 8.0;
+                        crate::engine::audio::sfx("meow");
                         self.pops.push(Pop { text: "Mjau".into(), x: a.x, z: a.z, age: 0.0, life: 1.3 });
                     }
                 }
@@ -514,6 +515,7 @@ impl World {
                     }
                     if cur == 0 && quack <= 0.0 && i == 0 && hyp(me, POND) < 4.5 {
                         quack = 6.0 + (a.ph * 7.1) % 8.0;
+                        crate::engine::audio::sfx("quack");
                         self.pops.push(Pop { text: "Kvack!".into(), x: a.x, z: a.z, age: 0.0, life: 1.4 });
                     }
                 }
@@ -530,6 +532,7 @@ impl World {
                         }
                     } else if cur == 0 && hyp(me, (a.x, a.z)) < 1.8 {
                         a.away = 15.0 + (a.ph * 11.0) % 15.0;
+                        crate::engine::audio::sfx("flap");
                         a.y = 0.1;
                         a.left = a.hx <= 10.5;
                     }
@@ -741,6 +744,7 @@ impl World {
     /// Krabban fångades genom klick/E (Use("krabba") skickades)
     pub(super) fn crab_caught(&mut self) {
         if let Some(c) = self.life.crab.take() {
+            crate::engine::audio::sfx("squeak");
             self.life.burst(c.x, c.z, 26, 0xff7a4a);
             self.pop("Fångad!", c.x, c.z);
         }

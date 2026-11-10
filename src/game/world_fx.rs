@@ -44,6 +44,7 @@ impl Fx {
             if self.bolt_t <= 0.0 {
                 self.bolt_t = 30.0 + hash2((t * 10.0) as i32, 3, 4) as f64 * 40.0;
                 self.flash = 1.0;
+                crate::engine::audio::sfx("thunder");
             }
         }
     }
