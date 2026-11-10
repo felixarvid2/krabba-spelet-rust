@@ -601,13 +601,18 @@ pub struct Verify {
 
 /// Beviset för en uppgift i svårt läge (byggsteg och "titta"-uppgifter får också ett).
 pub fn verify(task_id: &str) -> Verify {
-    let _ = task_id;
-    Verify { on: vec!["Tekniker"], cmds: vec!["ping"], text: "Bevisa att felet är löst med ett ping från laptopen." }
+    verify::table(task_id).unwrap_or_else(|| Verify {
+        on: vec!["Tekniker"],
+        cmds: vec!["ping"],
+        text: "Bevisa att felet är löst med ett ping från laptopen.",
+    })
 }
 
 /// Matchar en inskriven rad mot ett godkänt bevis (skiftlägesokänsligt, tål extra mellanslag
 /// och IOS-förkortningar som "sh int status" för "show interfaces status").
 pub fn verify_matches(v: &Verify, dev: &str, line: &str) -> bool {
-    let _ = (v, dev, line);
-    false
+    verify::matches(v, dev, line)
 }
+
+#[path = "levels_verify.rs"]
+mod verify;
