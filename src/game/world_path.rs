@@ -62,6 +62,11 @@ impl Nav {
             }
         }
     }
+    /// Är punkten fri (utanför hinder med marginal)?
+    pub fn free_at(&self, x: f64, z: f64) -> bool {
+        let (i, j) = self.cell_of(x, z);
+        self.free(i, j)
+    }
     fn cell_of(&self, x: f64, z: f64) -> (i32, i32) {
         (((x - self.x0) / CELL).floor() as i32, ((z - self.z0) / CELL).floor() as i32)
     }

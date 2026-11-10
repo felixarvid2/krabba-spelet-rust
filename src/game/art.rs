@@ -1277,3 +1277,99 @@ pub fn arrow_down(col: u32) -> Cv {
     g.rect(5, 9, 1, 1, c(col));
     g
 }
+
+// ------------------------------------------------------------------ Djur och Krabban
+
+const OUTL: u32 = 0x2b1a10;
+
+/// Små former med mörk kontur runt varje: (x, y, b, h, färg)
+fn blobs(w: i32, h: i32, list: &[(i32, i32, i32, i32, u32)]) -> Cv {
+    let mut g = Cv::new(w, h);
+    for &(x, y, bw, bh, _) in list {
+        g.rect(x - 1, y - 1, bw + 2, bh + 2, c(OUTL));
+    }
+    for &(x, y, bw, bh, col) in list {
+        g.rect(x, y, bw, bh, c(col));
+    }
+    g
+}
+
+/// Krabban (röd, ögon på skaft). Ankare: (11, 13) = marken under kroppen. frame 0/1 ger benrörelse.
+pub fn crab_sprite(frame: u8, fleeing: bool) -> Cv {
+    let mut g = Cv::new(22, 16);
+    let (ox, oy) = (11, 13);
+    let k = (frame % 2) as i32;
+    let mut px = |x: i32, y: i32, w: i32, h: i32, col: u32| g.rect(ox + x, oy + y, w, h, c(col));
+    // Ben
+    for i in 0..3 {
+        let o = (i + k) % 2;
+        px(-8, -4 + (i as f32 * 1.5) as i32 - o, 3, 1, OUTL);
+        px(5, -4 + (i as f32 * 1.5) as i32 - (1 - o), 3, 1, OUTL);
+    }
+    // Klor
+    let lift = if fleeing { -2 } else { 0 };
+    px(-9, -10 + lift, 4, 4, OUTL);
+    px(-8, -9 + lift, 2, 2, 0xe84a2c);
+    px(5, -10 + lift, 4, 4, OUTL);
+    px(6, -9 + lift, 2, 2, 0xe84a2c);
+    // Kropp
+    px(-6, -8, 12, 6, OUTL);
+    px(-5, -7, 10, 4, 0xe84a2c);
+    px(-4, -7, 8, 1, 0xff7a55);
+    px(-5, -4, 10, 1, 0xb82e18);
+    // Ögon
+    px(-3, -11, 2, 3, OUTL);
+    px(1, -11, 2, 3, OUTL);
+    px(-3, -11, 1, 1, 0xffffff);
+    px(1, -11, 1, 1, 0xffffff);
+    g
+}
+
+/// Katt som tittar åt höger. Ankare: (8, 11). state 0/1 = gång, 2 = sitter.
+pub fn cat_sprite(state: u8) -> Cv {
+    const O: u32 = 0xd98a3d;
+    const D: u32 = 0xa8631f;
+    const L: u32 = 0xf0c68a;
+    let mut g = if state == 2 {
+        blobs(16, 13, &[(3, 5, 6, 6, O), (8, 2, 5, 5, O), (8, 1, 1, 2, D), (12, 1, 1, 2, D), (1, 8, 3, 2, D), (4, 10, 4, 1, L)])
+    } else {
+        let a = (state % 2) as i32;
+        blobs(
+            18,
+            13,
+            &[(3, 4, 9, 4, O), (11, 2, 5, 4, O), (11, 1, 1, 2, D), (15, 1, 1, 2, D), (0, 1 + a, 2, 4, D), (3, 8, 2, 2 + a, D), (5, 8, 2, 2 + (1 - a), O), (9, 8, 2, 2 + (1 - a), D), (11, 8, 2, 2 + a, O)],
+        )
+    };
+    // Ögon, ränder
+    if state == 2 {
+        g.rect(11, 4, 1, 1, c(0x203020));
+        g.rect(4, 6, 1, 3, c(D));
+        g.rect(6, 6, 1, 3, c(D));
+    } else {
+        g.rect(14, 3, 1, 1, c(0x203020));
+        g.rect(5, 4, 1, 3, c(D));
+        g.rect(8, 4, 1, 3, c(D));
+    }
+    g
+}
+
+/// Anka som tittar åt höger. Ankare: (7, 8).
+pub fn duck_sprite() -> Cv {
+    blobs(15, 10, &[(1, 3, 8, 4, 0xf2efe6), (0, 2, 2, 2, 0xf2efe6), (8, 0, 4, 4, 0x2f6b3a), (12, 2, 2, 2, 0xf0a020), (3, 4, 4, 2, 0xb9b2a0)])
+}
+
+/// Duva som tittar åt höger. Ankare: (5, 8). flying = vingarna upp.
+pub fn pigeon_sprite(flying: bool) -> Cv {
+    let mut g = if flying {
+        blobs(12, 12, &[(2, 5, 7, 3, 0x9aa0a8), (8, 3, 3, 3, 0x6c727a), (1, 1, 3, 4, 0xb4bac2), (5, 0, 3, 4, 0xb4bac2)])
+    } else {
+        blobs(12, 10, &[(1, 3, 7, 4, 0x9aa0a8), (7, 1, 3, 3, 0x6c727a), (7, 3, 2, 2, 0x7a5a9a), (3, 7, 1, 2, 0xd98fa0), (5, 7, 1, 2, 0xd98fa0)])
+    };
+    g.rect(if flying { 10 } else { 10 }, 2, 1, 1, c(0xe8d8a0));
+    g
+}
+
+/// Mås som tittar åt höger. Ankare: (7, 10).
+pub fn gull_sprite() -> Cv {
+    blobs(17, 12, &[(2, 4, 8, 4, 0xf4f4f0), (0, 4, 3, 2, 0xdfe3e6), (3, 4, 5, 2, 0x9aa6b0), (9, 1, 4, 4, 0xf4f4f0), (13, 3, 2, 1, 0xf0b020), (5, 8, 1, 3, 0xe08a30), (7, 8, 1, 3, 0xe08a30)])
+}

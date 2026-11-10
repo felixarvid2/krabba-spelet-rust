@@ -73,6 +73,10 @@ pub enum IKind {
     Npc(String),
     /// Kabel mellan enhet och port ("nic" för datorer)
     Cable(String, String),
+    /// Ett djur ("katten", "ankorna", "duvorna", "masen")
+    Animal(&'static str),
+    /// Krabban
+    Crab,
 }
 
 #[derive(Clone, Debug)]
@@ -134,6 +138,8 @@ pub struct Site {
     pub cables: Vec<(f64, f64)>,
     /// Kablar att byta: (x, z, dev, port)
     pub cable_spots: Vec<(f64, f64, String, String)>,
+    /// Lyktstolpar: (x, z)
+    pub lamps: Vec<(f64, f64)>,
 }
 
 pub fn site_bounds(key: &str) -> (f64, f64, f64, f64) {
@@ -173,6 +179,7 @@ struct B {
     walls: Vec<WallRec>,
     cables: Vec<(f64, f64)>,
     cable_spots: Vec<(f64, f64, String, String)>,
+    lamps: Vec<(f64, f64)>,
 }
 
 fn px_x(x: f64) -> i32 {
@@ -200,6 +207,7 @@ impl B {
             walls: vec![],
             cables: vec![],
             cable_spots: vec![],
+            lamps: vec![],
         }
     }
     fn col(&mut self, x0: f64, z0: f64, x1: f64, z1: f64) {
@@ -383,6 +391,7 @@ impl B {
         i
     }
     fn lamp(&mut self, x: f64, z: f64) {
+        self.lamps.push((x, z));
         let i = self.add_o(lamp_post(), x, z, 6, 57);
         self.items[i].shadow = Shadow::Ell { rx: 0.3, rz: 0.15, dx: 0.2 };
         self.col(x - 0.12, z - 0.1, x + 0.12, z + 0.1);
@@ -1578,6 +1587,7 @@ fn finish(mut b: B, ground: Cv, name: &'static str, spawn: (f64, f64, u8), build
         building,
         cables: b.cables,
         cable_spots: b.cable_spots,
+        lamps: b.lamps,
     }
 }
 
