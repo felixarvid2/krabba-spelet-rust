@@ -8,7 +8,7 @@ Det här är en Rust-port av 2D-delen av [Krabba-passet](https://github.com/feli
 
 Ladda ner från [Releases](https://github.com/felixarvid2/krabba-spelet-rust/releases/latest):
 
-- **I webbläsaren:** packa upp `krabba-spelet-<version>-webb.zip` och dubbelklicka på `index.html`. Fungerar i Chrome, Edge och Firefox, utan internet och utan installation. Framstegen sparas i webbläsaren.
+- **I webbläsaren:** packa upp `krabba-spelet-v<version>-webb.zip` och dubbelklicka på `index.html`. Fungerar i Chrome, Edge och Firefox, utan internet och utan installation. Framstegen sparas i webbläsaren.
 - **Ubuntu/Debian:** `sudo apt install ./krabba-spelet_<version>_amd64.deb` och starta *Krabba spelet* från programmenyn (eller `krabba-spelet` i en terminal). Kräver Ubuntu 22.04, Debian 12 eller nyare.
 
 ### Från källkoden
@@ -23,7 +23,11 @@ På Linux behövs X11- eller Wayland-biblioteken (`libx11-dev`, `libxkbcommon-de
 
 Framsteg, inställningar, anteckningar och terminalhistorik sparas i `~/.krabba-spelet/save.json` (Windows: `%APPDATA%\krabba-spelet\save.json`). Miljövariabeln `KRABBA_SAVE` pekar om filen.
 
-### Bygga releasefilerna
+### Releaser
+
+Releaser byggs och publiceras av GitHub Actions när en `docs/releases/vX.Y.Z.md` slås ihop till main – se [docs/RELEASE.md](docs/RELEASE.md).
+
+### Bygga releasefilerna lokalt
 
 ```
 rustup target add wasm32-unknown-unknown
