@@ -3,6 +3,9 @@
 //! fönster och inmatning via minifb, och ett huvudlöst läge som sparar bilder som PNG (för tester).
 #![allow(unused_variables, dead_code)]
 
+mod text;
+mod window;
+
 pub type Color = u32;
 
 pub const fn rgb(r: u8, g: u8, b: u8) -> Color {
@@ -23,7 +26,16 @@ impl Sprite {
     }
     /// Bygg en sprite från en teckenkarta: varje tecken slås upp i palett (tecken -> 0xAARRGGBB), '.' eller ' ' = genomskinligt
     pub fn from_map(rows: &[&str], palette: &[(char, u32)]) -> Sprite {
-        todo!("Sprite::from_map")
+        let w = rows.iter().map(|r| r.chars().count()).max().unwrap_or(0);
+        let mut sp = Sprite::new(w, rows.len());
+        for (y, row) in rows.iter().enumerate() {
+            for (x, ch) in row.chars().enumerate() {
+                if let Some((_, col)) = palette.iter().find(|(c, _)| *c == ch) {
+                    sp.px[y * w + x] = *col;
+                }
+            }
+        }
+        sp
     }
     pub fn set(&mut self, x: usize, y: usize, argb: u32) {
         if x < self.w && y < self.h {
@@ -49,49 +61,271 @@ pub struct Canvas {
     pub clip: (i32, i32, i32, i32),
 }
 
+/// Blandar en kanal: s över d med alfa a (0–255)
+#[inline(always)]
+fn mix(s: u32, d: u32, a: u32) -> u32 {
+    let ia = 255 - a;
+    let r = (((s >> 16) & 255) * a + ((d >> 16) & 255) * ia + 127) / 255;
+    let g = (((s >> 8) & 255) * a + ((d >> 8) & 255) * ia + 127) / 255;
+    let b = ((s & 255) * a + (d & 255) * ia + 127) / 255;
+    (r << 16) | (g << 8) | b
+}
+
 impl Canvas {
     pub fn new(w: usize, h: usize) -> Canvas {
         Canvas { w, h, px: vec![0; w * h], clip: (0, 0, w as i32, h as i32) }
     }
-    pub fn clear(&mut self, c: Color) { todo!() }
-    pub fn set_clip(&mut self, x: i32, y: i32, w: i32, h: i32) { todo!() }
-    pub fn reset_clip(&mut self) { todo!() }
-    pub fn pixel(&mut self, x: i32, y: i32, c: Color) { todo!() }
+    pub fn clear(&mut self, c: Color) {
+        let c = c & 0xFFFFFF;
+        self.px.fill(c);
+    }
+    pub fn set_clip(&mut self, x: i32, y: i32, w: i32, h: i32) {
+        let x0 = x.clamp(0, self.w as i32);
+        let y0 = y.clamp(0, self.h as i32);
+        let x1 = x.saturating_add(w).clamp(x0, self.w as i32);
+        let y1 = y.saturating_add(h).clamp(y0, self.h as i32);
+        self.clip = (x0, y0, x1, y1);
+    }
+    pub fn reset_clip(&mut self) {
+        self.clip = (0, 0, self.w as i32, self.h as i32);
+    }
+    #[inline]
+    pub fn pixel(&mut self, x: i32, y: i32, c: Color) {
+        let (x0, y0, x1, y1) = self.clip;
+        if x >= x0 && x < x1 && y >= y0 && y < y1 {
+            self.px[y as usize * self.w + x as usize] = c & 0xFFFFFF;
+        }
+    }
     /// Blandar in färgen med alfa 0–255
-    pub fn pixel_a(&mut self, x: i32, y: i32, c: Color, a: u8) { todo!() }
-    pub fn fill_rect(&mut self, x: i32, y: i32, w: i32, h: i32, c: Color) { todo!() }
-    pub fn fill_rect_a(&mut self, x: i32, y: i32, w: i32, h: i32, c: Color, a: u8) { todo!() }
+    #[inline]
+    pub fn pixel_a(&mut self, x: i32, y: i32, c: Color, a: u8) {
+        let (x0, y0, x1, y1) = self.clip;
+        if a == 0 || x < x0 || x >= x1 || y < y0 || y >= y1 {
+            return;
+        }
+        let i = y as usize * self.w + x as usize;
+        self.px[i] = if a == 255 { c & 0xFFFFFF } else { mix(c, self.px[i], a as u32) };
+    }
+    pub fn fill_rect(&mut self, x: i32, y: i32, w: i32, h: i32, c: Color) {
+        let (cx0, cy0, cx1, cy1) = self.clip;
+        let x0 = x.max(cx0);
+        let y0 = y.max(cy0);
+        let x1 = x.saturating_add(w).min(cx1);
+        let y1 = y.saturating_add(h).min(cy1);
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
+        let c = c & 0xFFFFFF;
+        for yy in y0..y1 {
+            let o = yy as usize * self.w;
+            self.px[o + x0 as usize..o + x1 as usize].fill(c);
+        }
+    }
+    pub fn fill_rect_a(&mut self, x: i32, y: i32, w: i32, h: i32, c: Color, a: u8) {
+        if a == 255 {
+            return self.fill_rect(x, y, w, h, c);
+        }
+        if a == 0 {
+            return;
+        }
+        let (cx0, cy0, cx1, cy1) = self.clip;
+        let x0 = x.max(cx0);
+        let y0 = y.max(cy0);
+        let x1 = x.saturating_add(w).min(cx1);
+        let y1 = y.saturating_add(h).min(cy1);
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
+        for yy in y0..y1 {
+            let o = yy as usize * self.w;
+            for p in &mut self.px[o + x0 as usize..o + x1 as usize] {
+                *p = mix(c, *p, a as u32);
+            }
+        }
+    }
     /// Ram med tjocklek t
-    pub fn rect(&mut self, x: i32, y: i32, w: i32, h: i32, t: i32, c: Color) { todo!() }
+    pub fn rect(&mut self, x: i32, y: i32, w: i32, h: i32, t: i32, c: Color) {
+        if w <= 0 || h <= 0 || t <= 0 {
+            return;
+        }
+        let t = t.min(w / 2 + 1).min(h / 2 + 1);
+        self.fill_rect(x, y, w, t, c);
+        self.fill_rect(x, y + h - t, w, t, c);
+        self.fill_rect(x, y + t, t, h - 2 * t, c);
+        self.fill_rect(x + w - t, y + t, t, h - 2 * t, c);
+    }
     /// Fylld rektangel med rundade hörn (radie r)
-    pub fn round_rect(&mut self, x: i32, y: i32, w: i32, h: i32, r: i32, c: Color, a: u8) { todo!() }
-    pub fn line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, c: Color) { todo!() }
-    pub fn thick_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, t: i32, c: Color) { todo!() }
-    pub fn circle(&mut self, cx: i32, cy: i32, r: i32, c: Color, a: u8) { todo!() }
-    pub fn ellipse(&mut self, cx: i32, cy: i32, rx: i32, ry: i32, c: Color, a: u8) { todo!() }
+    pub fn round_rect(&mut self, x: i32, y: i32, w: i32, h: i32, r: i32, c: Color, a: u8) {
+        if w <= 0 || h <= 0 {
+            return;
+        }
+        let r = r.clamp(0, w.min(h) / 2);
+        for row in 0..h {
+            // hur mycket raden dras in av hörnen
+            let dy = if row < r { r - row } else if row >= h - r { row - (h - r) + 1 } else { 0 };
+            let inset = if dy == 0 {
+                0
+            } else {
+                let rr = (r * r - (dy - 1) * (dy - 1)) as f32;
+                r - rr.max(0.0).sqrt().round() as i32
+            };
+            self.fill_rect_a(x + inset, y + row, w - 2 * inset, 1, c, a);
+        }
+    }
+    pub fn line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, c: Color) {
+        let (mut x, mut y) = (x0, y0);
+        let dx = (x1 - x0).abs();
+        let dy = -(y1 - y0).abs();
+        let sx = if x0 < x1 { 1 } else { -1 };
+        let sy = if y0 < y1 { 1 } else { -1 };
+        let mut err = dx + dy;
+        loop {
+            self.pixel(x, y, c);
+            if x == x1 && y == y1 {
+                break;
+            }
+            let e2 = 2 * err;
+            if e2 >= dy {
+                err += dy;
+                x += sx;
+            }
+            if e2 <= dx {
+                err += dx;
+                y += sy;
+            }
+        }
+    }
+    pub fn thick_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, t: i32, c: Color) {
+        if t <= 1 {
+            return self.line(x0, y0, x1, y1, c);
+        }
+        // Bresenham med fyrkantig penna
+        let (mut x, mut y) = (x0, y0);
+        let dx = (x1 - x0).abs();
+        let dy = -(y1 - y0).abs();
+        let sx = if x0 < x1 { 1 } else { -1 };
+        let sy = if y0 < y1 { 1 } else { -1 };
+        let mut err = dx + dy;
+        let off = t / 2;
+        loop {
+            self.fill_rect(x - off, y - off, t, t, c);
+            if x == x1 && y == y1 {
+                break;
+            }
+            let e2 = 2 * err;
+            if e2 >= dy {
+                err += dy;
+                x += sx;
+            }
+            if e2 <= dx {
+                err += dx;
+                y += sy;
+            }
+        }
+    }
+    /// Fylld cirkel
+    pub fn circle(&mut self, cx: i32, cy: i32, r: i32, c: Color, a: u8) {
+        self.ellipse(cx, cy, r, r, c, a);
+    }
+    /// Fylld ellips
+    pub fn ellipse(&mut self, cx: i32, cy: i32, rx: i32, ry: i32, c: Color, a: u8) {
+        if rx < 0 || ry < 0 {
+            return;
+        }
+        for dy in -ry..=ry {
+            let t = if ry == 0 { 0.0 } else { dy as f32 / (ry as f32 + 0.5) };
+            let hw = ((rx as f32 + 0.5) * (1.0 - t * t).max(0.0).sqrt()).round() as i32;
+            let hw = hw.min(rx);
+            self.fill_rect_a(cx - hw, cy + dy, 2 * hw + 1, 1, c, a);
+        }
+    }
     /// Ritar en sprite med heltalsskala (pixlarna blir scale×scale), flip = spegla horisontellt
-    pub fn blit(&mut self, s: &Sprite, x: i32, y: i32, scale: i32, flip: bool) { todo!() }
+    pub fn blit(&mut self, s: &Sprite, x: i32, y: i32, scale: i32, flip: bool) {
+        self.blit_a(s, x, y, scale, flip, 255);
+    }
     /// Som blit men med extra genomskinlighet 0–255
-    pub fn blit_a(&mut self, s: &Sprite, x: i32, y: i32, scale: i32, flip: bool, alpha: u8) { todo!() }
+    pub fn blit_a(&mut self, s: &Sprite, x: i32, y: i32, scale: i32, flip: bool, alpha: u8) {
+        let sc = scale.max(1);
+        if alpha == 0 || s.w == 0 || s.h == 0 {
+            return;
+        }
+        let (cx0, cy0, cx1, cy1) = self.clip;
+        let (dw, dh) = (s.w as i32 * sc, s.h as i32 * sc);
+        let dx0 = x.max(cx0);
+        let dx1 = (x + dw).min(cx1);
+        let dy0 = y.max(cy0);
+        let dy1 = (y + dh).min(cy1);
+        if dx0 >= dx1 || dy0 >= dy1 {
+            return;
+        }
+        let al = alpha as u32;
+        for yy in dy0..dy1 {
+            let sy = ((yy - y) / sc) as usize;
+            let srow = &s.px[sy * s.w..(sy + 1) * s.w];
+            let drow = &mut self.px[yy as usize * self.w..(yy as usize + 1) * self.w];
+            for xx in dx0..dx1 {
+                let mut sx = ((xx - x) / sc) as usize;
+                if flip {
+                    sx = s.w - 1 - sx;
+                }
+                let p = srow[sx];
+                let mut pa = p >> 24;
+                if pa == 0 {
+                    continue;
+                }
+                if al != 255 {
+                    pa = (pa * al + 127) / 255;
+                }
+                let d = &mut drow[xx as usize];
+                *d = if pa >= 255 { p & 0xFFFFFF } else if pa == 0 { continue } else { mix(p, *d, pa) };
+            }
+        }
+    }
     /// Mörkar/tonar hela ytan mot färgen (för dialoger bakom)
-    pub fn dim(&mut self, c: Color, a: u8) { todo!() }
-}
+    pub fn dim(&mut self, c: Color, a: u8) {
+        if a == 0 {
+            return;
+        }
+        let a = a as u32;
+        if a == 255 {
+            return self.clear(c);
+        }
+        // förräkna källans bidrag, per kanal
+        let (sr, sg, sb) = (((c >> 16) & 255) * a, ((c >> 8) & 255) * a, (c & 255) * a);
+        let ia = 255 - a;
+        for p in &mut self.px {
+            let d = *p;
+            let r = (sr + ((d >> 16) & 255) * ia + 127) / 255;
+            let g = (sg + ((d >> 8) & 255) * ia + 127) / 255;
+            let b = (sb + (d & 255) * ia + 127) / 255;
+            *p = (r << 16) | (g << 8) | b;
+        }
+    }
 
-/// Typsnitten med glyfcache per storlek.
-pub struct Fonts {}
-
-impl Fonts {
-    /// Laddar VT323 och Press Start 2P (inbäddade med include_bytes! från assets/fonts)
-    pub fn load() -> Fonts { todo!() }
-    /// Ritar text och returnerar bredden i pixlar. size = pixelhöjd. Stöder svenska tecken (åäö) och de vanligaste symbolerna.
-    pub fn text(&mut self, c: &mut Canvas, x: i32, y: i32, s: &str, size: f32, color: Color, kind: FontKind) -> i32 { todo!() }
-    /// (bredd, höjd) i pixlar
-    pub fn measure(&mut self, s: &str, size: f32, kind: FontKind) -> (i32, i32) { todo!() }
-    /// Bredden på ett tecken i monospace (VT323) vid storleken
-    pub fn mono_advance(&mut self, size: f32) -> f32 { todo!() }
-    /// Radbryter text till maxbredd (ord för ord, behåller \n)
-    pub fn wrap(&mut self, s: &str, size: f32, kind: FontKind, max_w: i32) -> Vec<String> { todo!() }
+    /// Blandar in en täckningskarta (0–255 per pixel) i färgen c, med klippning (används av text).
+    pub(crate) fn blend_cov(&mut self, x: i32, y: i32, w: usize, h: usize, cov: &[u8], c: Color) {
+        let (cx0, cy0, cx1, cy1) = self.clip;
+        for row in 0..h as i32 {
+            let yy = y + row;
+            if yy < cy0 || yy >= cy1 {
+                continue;
+            }
+            for col in 0..w as i32 {
+                let xx = x + col;
+                if xx < cx0 || xx >= cx1 {
+                    continue;
+                }
+                let a = cov[row as usize * w + col as usize] as u32;
+                if a == 0 {
+                    continue;
+                }
+                let i = yy as usize * self.w + xx as usize;
+                self.px[i] = if a == 255 { c & 0xFFFFFF } else { mix(c, self.px[i], a) };
+            }
+        }
+    }
 }
+pub use text::Fonts;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Key {
@@ -141,11 +375,7 @@ pub trait Game {
 pub const WIDTH: usize = 1280;
 pub const HEIGHT: usize = 720;
 
-/// Öppnar ett fönster och kör spelet med ~60 bilder per sekund.
-pub fn run(title: &str, game: &mut dyn Game) { todo!() }
+/// Öppnar ett fönster, kör spelet (~60 bilder/s): se window::run.
+/// Huvudlöst läge med PNG-skärmdumpar: window::run_headless.
+pub use window::{run, run_headless, save_png};
 
-/// Huvudlöst: kör spelet med förinspelad inmatning (en Input per bildruta, dt = 1/60)
-/// och sparar en PNG efter de bildrutor som anges i `shots` (bildrutans index, filnamn).
-pub fn run_headless(game: &mut dyn Game, inputs: &[Input], shots: &[(usize, String)]) { todo!() }
-
-pub fn save_png(c: &Canvas, path: &str) -> std::io::Result<()> { todo!() }
