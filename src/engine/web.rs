@@ -217,3 +217,24 @@ pub extern "C" fn kb_alloc(n: usize) -> *mut u8 {
     std::mem::forget(v);
     p
 }
+
+thread_local! {
+    static AUDIO_BUF: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Ljudet får starta (efter första klick eller tangent)
+#[unsafe(no_mangle)]
+pub extern "C" fn kb_audio_unlock() {
+    super::audio::unlock();
+}
+
+/// Blandar `frames` stereoramar (44,1 kHz, L R L R …) och returnerar pekaren till dem
+#[unsafe(no_mangle)]
+pub extern "C" fn kb_audio(frames: usize) -> *const f32 {
+    AUDIO_BUF.with(|b| {
+        let mut b = b.borrow_mut();
+        b.resize(frames * 2, 0.0);
+        super::audio::render(&mut b);
+        b.as_ptr()
+    })
+}

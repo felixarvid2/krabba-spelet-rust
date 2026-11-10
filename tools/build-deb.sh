@@ -22,7 +22,7 @@ Version: $V
 Section: games
 Priority: optional
 Architecture: amd64
-Depends: libc6 (>= 2.35), libgcc-s1, libx11-6, libxcursor1, libxkbcommon0
+Depends: libc6 (>= 2.35), libgcc-s1, libasound2t64 | libasound2, libx11-6, libxcursor1, libxkbcommon0
 Recommends: libwayland-client0, xclip | wl-clipboard
 Installed-Size: $SIZE
 Maintainer: felixarvid2 <felixarvid2@users.noreply.github.com>

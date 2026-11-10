@@ -66,7 +66,7 @@ jobs:
       - name: Systempaket
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q libx11-dev libxcursor-dev libxkbcommon-dev libwayland-dev pkg-config zip
+          sudo apt-get install -y -q libx11-dev libxcursor-dev libxkbcommon-dev libwayland-dev libasound2-dev pkg-config zip
 
       - name: Rust
         run: |
