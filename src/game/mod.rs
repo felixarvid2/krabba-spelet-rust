@@ -3,6 +3,7 @@
 #![allow(unused_variables, dead_code)]
 pub mod handbook;
 pub mod handbook_data;
+pub mod art;
 pub mod levels;
 pub mod terminal;
 pub mod ui_dialog;
@@ -11,6 +12,8 @@ pub mod ui_save;
 pub mod ui_screens;
 pub mod ui_widgets;
 pub mod world;
+pub mod world_map;
+pub mod world_path;
 
 use crate::cli::Cli;
 use crate::engine::{self, Canvas, Fonts, Input, Key};
