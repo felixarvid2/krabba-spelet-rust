@@ -865,6 +865,7 @@ impl App {
         // demo-skript
         self.run_demo();
 
+        if self.frame % 20 == 0 || (self.frame > 10 && self.frame < 30) { eprintln!("f{} ov{} term{}", self.frame, self.overlays.len(), self.term.open); }
         // överlägg har företräde
         if !self.overlays.is_empty() {
             self.update_overlays(input);

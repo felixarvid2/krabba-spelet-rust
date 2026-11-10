@@ -23,9 +23,44 @@ pub enum EKind {
     Win,
 }
 
+/// Sessionen: värdsessioner behålls konkret (console_target/events), övriga som Box<dyn Cli>
+pub enum Sess {
+    Host(Box<HostSession>),
+    Dyn(Box<dyn Cli>),
+}
+
+impl Sess {
+    fn c(&self) -> &dyn Cli {
+        match self {
+            Sess::Host(h) => h.as_ref(),
+            Sess::Dyn(d) => d.as_ref(),
+        }
+    }
+    fn m(&mut self) -> &mut dyn Cli {
+        match self {
+            Sess::Host(h) => h.as_mut(),
+            Sess::Dyn(d) => d.as_mut(),
+        }
+    }
+}
+
+impl Cli for Sess {
+    fn prompt_text(&self, st: &State) -> String { self.c().prompt_text(st) }
+    fn handle(&mut self, st: &mut State, line: &str) -> CmdResult { self.m().handle(st, line) }
+    fn help(&mut self, st: &mut State, line: &str) -> String { self.m().help(st, line) }
+    fn complete(&mut self, st: &mut State, line: &str) -> Option<String> { self.m().complete(st, line) }
+    fn secret_input(&self) -> bool { self.c().secret_input() }
+    fn closed(&self) -> bool { self.c().closed() }
+    fn dev_id(&self) -> &str { self.c().dev_id() }
+    fn booting(&self) -> bool { self.c().booting() }
+    fn finish_boot(&mut self, st: &mut State) { self.m().finish_boot(st) }
+    fn interrupt(&mut self, st: &mut State, ctrl_z: bool) { self.m().interrupt(st, ctrl_z) }
+    fn as_ios(&mut self) -> Option<&mut IosSession> { self.m().as_ios() }
+}
+
 pub struct Entry {
     pub kind: EKind,
-    pub session: Box<dyn Cli>,
+    pub session: Sess,
     pub dev: String,
     pub title: String,
     pub speed: u32,
@@ -268,7 +303,7 @@ impl Terminal {
             self.release(env);
             let sh = HostSession::new(env.st, "Tekniker");
             let banner = sh.banner(env.st);
-            self.stack.push(Entry { kind: EKind::Linux, session: Box::new(sh), dev: "Tekniker".into(), title: "tekniker@laptop".into(), speed: 0, ios: false, started: true, garbled: false, wait_return: false, hist_key: "linux".into() });
+            self.stack.push(Entry { kind: EKind::Linux, session: Sess::Host(Box::new(sh)), dev: "Tekniker".into(), title: "tekniker@laptop".into(), speed: 0, ios: false, started: true, garbled: false, wait_return: false, hist_key: "linux".into() });
             self.print(&format!("{}\n", banner));
         }
         self.show(env);
@@ -284,7 +319,7 @@ impl Terminal {
         let sh = HostSession::new(env.st, host);
         let banner = sh.banner(env.st);
         let label = env.st.devices.get(host).map(|d| if d.label.is_empty() { host.to_string() } else { d.label.clone() }).unwrap_or_else(|| host.to_string());
-        self.stack.push(Entry { kind: EKind::Win, session: Box::new(sh), dev: host.to_string(), title: format!("Kommandotolken – {}", label), speed: 0, ios: false, started: true, garbled: false, wait_return: false, hist_key: "win".into() });
+        self.stack.push(Entry { kind: EKind::Win, session: Sess::Host(Box::new(sh)), dev: host.to_string(), title: format!("Kommandotolken – {}", label), speed: 0, ios: false, started: true, garbled: false, wait_return: false, hist_key: "win".into() });
         self.print(&format!("{}\n", banner));
         self.show(env);
     }
@@ -309,7 +344,7 @@ impl Terminal {
     pub fn release(&mut self, env: &mut TermEnv) {
         while let Some(e) = self.stack.pop() {
             if e.kind == EKind::Serial {
-                env.consoles.insert(e.dev.clone(), e.session);
+                if let Sess::Dyn(b) = e.session { env.consoles.insert(e.dev.clone(), b); }
             }
         }
         self.input.clear();
@@ -346,7 +381,7 @@ impl Terminal {
                 let ios = env.st.devices.get(&target).map(|d| d.os == Os::Ios).unwrap_or(false);
                 let title = format!("screen /dev/ttyUSB0 {} — {}", speed, host_name(env.st, &target));
                 let booting = sess.booting();
-                self.stack.push(Entry { kind: EKind::Serial, session: sess, dev: target.clone(), title, speed, ios, started: false, garbled: false, wait_return: false, hist_key: format!("con:{}", target) });
+                self.stack.push(Entry { kind: EKind::Serial, session: Sess::Dyn(sess), dev: target.clone(), title, speed, ios, started: false, garbled: false, wait_return: false, hist_key: format!("con:{}", target) });
                 self.check_speed(env);
                 self.print("\n");
                 if booting {
@@ -359,7 +394,7 @@ impl Terminal {
             PushReq::Ios { dev, via, privileged, user } => {
                 let s2 = IosSession::new(env.st, &dev, &via, privileged, user.clone());
                 let title = format!("{} {}@{}", via, user.clone().unwrap_or_default(), host_name(env.st, &dev));
-                self.stack.push(Entry { kind: EKind::Ssh, session: Box::new(s2), dev: dev.clone(), title, speed: 0, ios: true, started: true, garbled: false, wait_return: false, hist_key: format!("ssh:{}", dev) });
+                self.stack.push(Entry { kind: EKind::Ssh, session: Sess::Dyn(Box::new(s2)), dev: dev.clone(), title, speed: 0, ios: true, started: true, garbled: false, wait_return: false, hist_key: format!("ssh:{}", dev) });
                 if via == "ssh" {
                     self.print("\n");
                 }
@@ -369,12 +404,12 @@ impl Terminal {
             }
             PushReq::Wlc { dev } => {
                 let w = WlcSession::new(env.st, &dev);
-                self.stack.push(Entry { kind: EKind::Ssh, session: Box::new(w), dev: dev.clone(), title: "ssh admin@WLC-Nordvik".into(), speed: 0, ios: false, started: true, garbled: false, wait_return: false, hist_key: format!("ssh:{}", dev) });
+                self.stack.push(Entry { kind: EKind::Ssh, session: Sess::Dyn(Box::new(w)), dev: dev.clone(), title: "ssh admin@WLC-Nordvik".into(), speed: 0, ios: false, started: true, garbled: false, wait_return: false, hist_key: format!("ssh:{}", dev) });
                 self.print("\n(Cisco Controller)\n");
             }
             PushReq::Lb { dev } => {
                 let l = LbSession::new(env.st, &dev);
-                self.stack.push(Entry { kind: EKind::Ssh, session: Box::new(l), dev: dev.clone(), title: "ssh admin@LB-Nordvik".into(), speed: 0, ios: false, started: true, garbled: false, wait_return: false, hist_key: format!("ssh:{}", dev) });
+                self.stack.push(Entry { kind: EKind::Ssh, session: Sess::Dyn(Box::new(l)), dev: dev.clone(), title: "ssh admin@LB-Nordvik".into(), speed: 0, ios: false, started: true, garbled: false, wait_return: false, hist_key: format!("ssh:{}", dev) });
                 self.print("\nLB-Nordvik 4.2 (lastbalanserare för tidrapporteringen)\nSkriv help för kommandon.\n");
             }
         }
@@ -394,7 +429,7 @@ impl Terminal {
             let h = env.st.devices.get(&t.dev).and_then(|d| d.config.as_ref()).map(|c| c.hostname.clone()).unwrap_or_default();
             self.print(&format!("\n{} con0 is now available\n\n\n\nPress RETURN to get started.\n", h));
             let fresh = Self::new_console(env.st, &t.dev);
-            self.stack.push(Entry { started: false, session: fresh, wait_return: false, ..t });
+            self.stack.push(Entry { started: false, session: Sess::Dyn(fresh), wait_return: false, ..t });
             return;
         }
         if self.stack.is_empty() {
@@ -413,7 +448,7 @@ impl Terminal {
         let first_kind = removed[0].kind;
         for e in removed {
             if e.kind == EKind::Serial {
-                env.consoles.insert(e.dev.clone(), e.session);
+                if let Sess::Dyn(b) = e.session { env.consoles.insert(e.dev.clone(), b); }
             }
         }
         if announce {
@@ -525,7 +560,16 @@ impl Terminal {
             events.push(TermEvent::Command(dev, line.to_string()));
         }
         let r = match self.stack.last_mut() {
-            Some(t) => t.session.handle(env.st, line),
+            Some(t) => {
+                if let Sess::Host(h) = &mut t.session {
+                    h.console_target = env.console_target.clone();
+                }
+                let r = t.session.handle(env.st, line);
+                if let Sess::Host(h) = &mut t.session {
+                    h.events.clear();
+                }
+                r
+            }
             None => return,
         };
         self.consume(env, r, events);
