@@ -3,6 +3,7 @@
 //! fönster och inmatning via minifb, och ett huvudlöst läge som sparar bilder som PNG (för tester).
 #![allow(unused_variables, dead_code)]
 
+pub mod audio;
 mod text;
 mod window;
 #[cfg(target_arch = "wasm32")]
