@@ -194,6 +194,12 @@ pub struct World {
     link_snap: Vec<(String, String, LinkState)>,
     has_mini: bool,
     last_use: Vec<WorldEvent>,
+    /// Gånghastighetens faktor (kaffe ger > 1)
+    pub speed_mult: f64,
+    /// Var Krabban gömmer sig: enhetens id eller kollegans namn (None = ingen krabba)
+    pub crab_near: Option<String>,
+    /// Gången sträcka i meter (för statistik)
+    pub walked: f64,
 }
 
 const SITE_KEYS: [&str; 3] = ["gbg", "boras", "molndal"];
@@ -266,6 +272,9 @@ impl World {
             link_snap: vec![],
             has_mini: false,
             last_use: vec![],
+            speed_mult: 1.0,
+            crab_near: None,
+            walked: 0.0,
         };
         w.teleport(cur);
         w
@@ -299,6 +308,19 @@ impl World {
     }
 
     /// Veckan (kollegor och bilar beror på den)
+    /// Gånghastighetens faktor (1.0 normalt, kaffe ger t.ex. 1.35 en stund)
+    pub fn set_speed_mult(&mut self, m: f64) {
+        self.speed_mult = m;
+    }
+    /// Gömmer Krabban nära en enhet eller kollega (None = ingen krabba). När spelaren fångar den
+    /// skickar update() WorldEvent::Use("krabba") och crab_near blir None.
+    pub fn set_crab(&mut self, near: Option<String>) {
+        self.crab_near = near;
+    }
+    /// Gången sträcka i meter sedan förra anropet (nollställs)
+    pub fn take_walked(&mut self) -> f64 {
+        std::mem::take(&mut self.walked)
+    }
     pub fn set_week(&mut self, week: u32) {
         self.week = week;
     }

@@ -585,3 +585,29 @@ pub fn challenge_done(week: u32, g: &ChallengeCtx) -> bool {
         _ => false,
     }
 }
+
+/// Svårt läge: hur spelaren bevisar att ett fel är löst.
+/// Felet räknas som löst först när check() är sant OCH spelaren därefter har kört ett av
+/// kommandona i `cmds` på en av enheterna i `on` (efter att felet rättades).
+#[derive(Clone, Debug)]
+pub struct Verify {
+    /// Enheter (id) där beviset ska köras, t.ex. ["PC-Anna"] eller ["SW1", "Tekniker"]
+    pub on: Vec<&'static str>,
+    /// Godkända kommandon som prefix (gemener, förkortningar tillåts av UI:t), t.ex. ["ping 192.168.1.10", "ping filserver"]
+    pub cmds: Vec<&'static str>,
+    /// Text i ärendelistan, t.ex. "Bevisa: pinga filservern (192.168.1.10) från Annas dator."
+    pub text: &'static str,
+}
+
+/// Beviset för en uppgift i svårt läge (byggsteg och "titta"-uppgifter får också ett).
+pub fn verify(task_id: &str) -> Verify {
+    let _ = task_id;
+    Verify { on: vec!["Tekniker"], cmds: vec!["ping"], text: "Bevisa att felet är löst med ett ping från laptopen." }
+}
+
+/// Matchar en inskriven rad mot ett godkänt bevis (skiftlägesokänsligt, tål extra mellanslag
+/// och IOS-förkortningar som "sh int status" för "show interfaces status").
+pub fn verify_matches(v: &Verify, dev: &str, line: &str) -> bool {
+    let _ = (v, dev, line);
+    false
+}

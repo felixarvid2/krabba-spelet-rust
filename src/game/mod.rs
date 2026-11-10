@@ -6,6 +6,7 @@ pub mod handbook_data;
 pub mod art;
 pub mod levels;
 pub mod terminal;
+pub mod ui_career;
 pub mod ui_dialog;
 pub mod ui_dialogs;
 pub mod ui_rack;
