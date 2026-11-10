@@ -13,6 +13,13 @@ use crate::net::sim::{self, Derived, State};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+#[path = "world_life.rs"]
+mod life;
+#[path = "world_fx.rs"]
+mod fx;
+use life::{Life, NpcAi};
+use fx::Fx;
+
 /// Något spelaren gjorde i världen som spelet (game::App) ska hantera.
 #[derive(Clone, Debug, PartialEq)]
 pub enum WorldEvent {
@@ -84,6 +91,11 @@ struct Npc {
     weeks: (u32, u32),
     phase: f64,
     col: Rect,
+    /// Riktning (0 = mot oss, 1 = bort, 2 = vänster, 3 = höger), gångbild och om figuren går
+    dir: u8,
+    frame: u8,
+    moving: bool,
+    ai: NpcAi,
 }
 
 // ------------------------------------------------------------------ Vy
@@ -200,6 +212,8 @@ pub struct World {
     pub crab_near: Option<String>,
     /// Gången sträcka i meter (för statistik)
     pub walked: f64,
+    life: Life,
+    fx: Fx,
 }
 
 const SITE_KEYS: [&str; 3] = ["gbg", "boras", "molndal"];
@@ -233,6 +247,10 @@ impl World {
                 weeks: d.weeks,
                 phase: (d.name.len() as f64 * 1.7 + x * 0.3).abs() % 6.0,
                 col: Rect { x0: x - 0.25, x1: x + 0.25, z0: z - 0.2, z1: z + 0.25 },
+                dir: 0,
+                frame: 0,
+                moving: false,
+                ai: NpcAi::default(),
             });
         }
         let mut w = World {
@@ -275,6 +293,8 @@ impl World {
             speed_mult: 1.0,
             crab_near: None,
             walked: 0.0,
+            life: Life::new(),
+            fx: Fx::new(),
         };
         w.teleport(cur);
         w
@@ -441,6 +461,7 @@ impl World {
             }
             v.push(Cand { x: i.x, z: i.z, r: i.r, kind: i.kind.clone(), label: i.label.clone(), item: i.item, npc: None });
         }
+        self.life_cands(&mut v);
         for (k, n) in self.npcs.iter().enumerate() {
             if self.npc_visible(n) {
                 v.push(Cand { x: n.x, z: n.z, r: 1.1, kind: IKind::Npc(n.name.to_string()), label: format!("Prata med {}", n.name), item: None, npc: Some(k) });
@@ -463,6 +484,8 @@ impl World {
             IKind::Coffee => WorldEvent::Use("coffee".into()),
             IKind::Travel(to) => WorldEvent::Travel(to.to_string()),
             IKind::Npc(n) => WorldEvent::Talk(n.clone()),
+            IKind::Animal(a) => WorldEvent::Use(format!("djur:{}", a)),
+            IKind::Crab => WorldEvent::Use("krabba".into()),
             IKind::Cable(dev, port) => WorldEvent::Cable(find_link(st, dev, port)?),
         })
     }
@@ -654,6 +677,15 @@ impl World {
         if let Some(e) = mv {
             events.push(e);
         }
+        // Kollegor, djur, Krabban och väder
+        self.update_npcs(dt, st, blocked);
+        self.update_animals(dt);
+        self.update_parts(dt);
+        self.fx.update(dt, self.t, self.week);
+        self.update_crab(dt, st, &mut events);
+        if events.iter().any(|e| matches!(e, WorldEvent::Use(s) if s == "krabba")) && self.crab_near.is_some() {
+            self.crab_caught();
+        }
         // Kameran
         self.update_camera(dt);
         // Dörrarna glider isär när du närmar dig
@@ -720,6 +752,7 @@ impl World {
             }
         }
         let mut speed = if input.is_down(Key::Shift) || input.shift || (self.goal.is_some() && self.run_path) { 5.0 } else { 3.2 };
+        speed *= self.speed_mult.max(0.0);
         let len = dx.hypot(dz);
         let mut moving = false;
         if len > 0.0 {
@@ -766,6 +799,7 @@ impl World {
             moving = moved_x || moved_z;
             // Fastnar du planeras vägen om, högst tre gånger
             let got = (self.pos.0 - ox).hypot(self.pos.1 - oz);
+            self.walked += got;
             if self.goal.is_some() && got < step * 0.3 {
                 self.path_stuck += dt;
             } else {
@@ -930,6 +964,8 @@ impl World {
             Item(usize),
             Npc(usize),
             Player,
+            Animal(usize),
+            Crab,
         }
         let mut list: Vec<(f64, Dr)> = vec![];
         {
@@ -950,6 +986,16 @@ impl World {
             for (k, n) in self.npcs.iter().enumerate() {
                 if self.npc_visible(n) && n.x > min_x && n.x < max_x {
                     list.push((n.z - 0.001, Dr::Npc(k)));
+                }
+            }
+            for (i, a) in self.life.animals.iter().enumerate() {
+                if a.site == cur && !(matches!(a.kind, life::AK::Duck(_)) && a.dive > 0.0) && a.y < 6.0 {
+                    list.push((a.z - 0.001, Dr::Animal(i)));
+                }
+            }
+            if let Some(cb) = &self.life.crab {
+                if cb.site == cur {
+                    list.push((cb.z - 0.003, Dr::Crab));
                 }
             }
             list.push((self.pos.1 - 0.002, Dr::Player));
@@ -983,9 +1029,23 @@ impl World {
                         let (sx, sy) = v.to_screen(self.pos.0, self.pos.1, 0.0);
                         dither_ellipse(fb, sx + 1, sy, 7.0, 2.6, 0.3);
                     }
+                    Dr::Animal(i) => {
+                        let a = &self.life.animals[*i];
+                        if !matches!(a.kind, life::AK::Duck(_)) {
+                            let (sx, sy) = v.to_screen(a.x, a.z, 0.0);
+                            let r = if a.y > 0.05 { 2.0 } else { 4.5 };
+                            dither_ellipse(fb, sx, sy, r, r * 0.4, 0.28);
+                        }
+                    }
+                    Dr::Crab => {
+                        let cb = self.life.crab.as_ref().unwrap();
+                        let (sx, sy) = v.to_screen(cb.x, cb.z, 0.0);
+                        dither_ellipse(fb, sx, sy, 7.0, 2.0, 0.25);
+                    }
                 }
             }
         }
+        let mut late: Vec<(Rc<Cv>, i32, i32)> = vec![];
         // Själva ritningen
         let hover_item = self.hover.as_ref().and_then(|h| h.item);
         let hover_npc = self.hover.as_ref().and_then(|h| h.npc);
@@ -1047,7 +1107,13 @@ impl World {
                     let (sx, sy) = v.to_screen(x, z, 0.0);
                     // Riktning och andning
                     let dd = (self.pos.0 - x).hypot(self.pos.1 - z);
-                    let dir = if !sit {
+                    let (n_dir, n_frame, n_moving) = {
+                        let n = &self.npcs[*k];
+                        (n.dir, n.frame, n.moving)
+                    };
+                    let dir = if n_moving {
+                        n_dir
+                    } else if !sit {
                         if dd < 2.5 {
                             let (dxp, dzp) = (self.pos.0 - x, self.pos.1 - z);
                             if dxp.abs() > dzp.abs() {
@@ -1058,14 +1124,14 @@ impl World {
                                 1
                             }
                         } else {
-                            0
+                            n_dir
                         }
                     } else if dd < 2.2 && (self.pos.0 - x).abs() > 0.5 {
                         if self.pos.0 < x { 2 } else { 3 }
                     } else {
                         0
                     };
-                    let frame = if (t * 2.1 + phase).sin() > 0.55 { 4 } else { 0 };
+                    let frame = if n_moving { n_frame } else if (t * 2.1 + phase).sin() > 0.55 { 4 } else { 0 };
                     let blink = (t + phase * 1.7) % 4.3 < 0.14;
                     let spr = self.person_sprite(look as u8, dir, frame, sit, blink);
                     let yoff = if sit { 4 } else { 0 };
@@ -1083,8 +1149,8 @@ impl World {
                     let mark = self.marks.get(name).copied().unwrap_or(Mark::None);
                     if mark != Mark::None {
                         let bob = ((t * 3.0 + phase).sin() * 1.5).round() as i32;
-                        let b = bubble(mark == Mark::Done);
-                        fb.blit(&b, sx - b.w / 2, top - 18 + bob);
+                        let b = Rc::new(bubble(mark == Mark::Done));
+                        late.push((b.clone(), sx - b.w / 2, top - 18 + bob));
                     }
                 }
                 Dr::Player => {
@@ -1093,7 +1159,61 @@ impl World {
                     let spr = self.person_sprite(255, self.dir, frame, false, t % 3.7 < 0.13);
                     fb.blit(&spr, sx - spr.w / 2, sy - spr.h);
                 }
+                Dr::Animal(i) => {
+                    let (kind, x, z, y, left, sit, moving, ph, away, hover_a) = {
+                        let a = &self.life.animals[*i];
+                        (a.kind, a.x, a.z, a.y, a.left, a.sit, a.moving, a.ph, a.away, self.hover.as_ref().map(|h| matches!(&h.kind, IKind::Animal(_)) && (h.x - a.x).hypot(h.z - a.z) < 0.01).unwrap_or(false))
+                    };
+                    let (sx, sy) = v.to_screen(x, z, y);
+                    let walk = ((ph * 6.0) as i64 % 2) as u8;
+                    let (spr, ax, ay, dy) = match kind {
+                        life::AK::Cat => {
+                            let (s, ax, ay) = self.life.sprite(1, if sit { 2 } else if moving { walk } else { 0 }, left);
+                            (s, ax, ay, 0)
+                        }
+                        life::AK::Duck(_) => {
+                            let (s, ax, ay) = self.life.sprite(2, 0, left);
+                            // Ringar i vattnet
+                            let rr = 5.0 + (ph * 2.0).sin() * 1.0;
+                            ring(fb, sx, sy, rr, rr * 0.4, ca(0xffffff, 0.35));
+                            (s, ax, ay, ((ph * 3.0).sin() * 0.6).round() as i32)
+                        }
+                        life::AK::Pigeon(_) => {
+                            let flying = away > 0.0;
+                            let peck = !flying && (ph * 2.2).sin() > 0.6;
+                            let (s, ax, ay) = self.life.sprite(3, if flying && walk == 0 { 1 } else { 0 }, left);
+                            (s, ax, ay, if peck { 1 } else { 0 })
+                        }
+                        life::AK::Gull => {
+                            let (s, ax, ay) = self.life.sprite(4, 0, left);
+                            (s, ax, ay, if moving && walk == 1 { -1 } else { 0 })
+                        }
+                    };
+                    fb.blit(&spr, sx - ax, sy - ay + dy);
+                    if hover_a {
+                        highlight(fb, &spr, sx - ax, sy - ay + dy, t);
+                    }
+                }
+                Dr::Crab => {
+                    let (x, z, anim, fleeing, left, moving) = {
+                        let c = self.life.crab.as_ref().unwrap();
+                        (c.x, c.z, c.anim, c.fleeing, c.left, c.moving)
+                    };
+                    let (sx, sy) = v.to_screen(x, z, 0.0);
+                    let var = ((anim * 8.0) as i64 % 2) as u8 + if fleeing { 2 } else { 0 };
+                    let (spr, ax, ay) = self.life.sprite(0, var, false);
+                    let _ = (left, moving);
+                    fb.blit(&spr, sx - ax, sy - ay);
+                    if self.hover.as_ref().map(|h| matches!(h.kind, IKind::Crab)).unwrap_or(false) {
+                        highlight(fb, &spr, sx - ax, sy - ay, t);
+                    }
+                }
             }
+        }
+        self.draw_parts(fb, v);
+        self.apply_light(fb, v, st);
+        for (b, x, y) in &late {
+            fb.blit(b, *x, *y);
         }
         // Ringar på sådant utan bild som går att använda
         if let Some(h) = &self.hover {
