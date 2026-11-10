@@ -2519,10 +2519,8 @@ pub fn interfaces_description(st: &mut State, dev: &str) -> String {
         if i.internal {
             continue;
         }
-        let line = brief_line(st, &dd, d, &n);
-        // JS skär på kolumn 60/82 (ger tom Protocol-kolumn); samma här för identisk utdata
-        let mut s = slice_chars(&line, 60, 82).trim().to_string();
-        let pr = line.chars().skip(82).collect::<String>().trim().to_string();
+        // Status och Protocol hämtas direkt (brief_status), inte genom att skära i brief-raden
+        let (mut s, pr) = brief_status(st, &dd, d, &n);
         if s == "administratively down" {
             s = "admin down".into();
         }
@@ -2875,5 +2873,48 @@ mod tests {
         let sw = phys_ports(st.dev("SW1"));
         assert_eq!(sw[0], "GigabitEthernet0/1");
         assert_eq!(sw.len(), 28);
+    }
+
+    /// Kolumnerna i "show interfaces description": Interface 0-30, Status 31-45, Protocol 46-54, Description 55+
+    #[test]
+    fn interfaces_description_kolumner() {
+        use crate::cli::ios::IosSession;
+        let mut st = state();
+        let mut s = IosSession::new(&st, "SW1", "console", true, None);
+        s.handle_line(&mut st, "configure terminal");
+        s.handle_line(&mut st, "interface gi0/5");
+        s.handle_line(&mut st, "description Till server");
+        s.handle_line(&mut st, "shutdown");
+        s.handle_line(&mut st, "end");
+        let t = s.handle_line(&mut st, "show interfaces description").out;
+        let mut rader = t.lines();
+        let rubrik = rader.next().unwrap();
+        assert_eq!(rubrik, "Interface                      Status         Protocol Description");
+        let rad = t.lines().find(|l| l.starts_with("Gi0/5")).expect("Gi0/5 saknas");
+        let kol = |a: usize, b: usize| rad.chars().skip(a).take(b - a).collect::<String>().trim().to_string();
+        assert_eq!(kol(0, 31), "Gi0/5");
+        assert_eq!(kol(31, 46), "admin down");
+        assert_eq!(kol(46, 55), "down");
+        assert_eq!(kol(55, 80), "Till server");
+        // en uppkopplad port: status up, protokoll up
+        let rad = t.lines().find(|l| l.starts_with("Gi0/1 ")).expect("Gi0/1 saknas");
+        let kol = |a: usize, b: usize| rad.chars().skip(a).take(b - a).collect::<String>().trim().to_string();
+        assert_eq!(kol(31, 46), "up");
+        assert_eq!(kol(46, 55), "up");
+    }
+
+    #[test]
+    fn interfaces_description_router_loopback() {
+        use crate::cli::ios::IosSession;
+        let mut st = state();
+        let mut s = IosSession::new(&st, "R1", "console", true, None);
+        s.handle_line(&mut st, "configure terminal");
+        s.handle_line(&mut st, "interface loopback 7");
+        s.handle_line(&mut st, "end");
+        let t = s.handle_line(&mut st, "show interfaces description").out;
+        let rad = t.lines().find(|l| l.starts_with("Lo7")).expect("Lo7 saknas");
+        let kol = |a: usize, b: usize| rad.chars().skip(a).take(b - a).collect::<String>().trim().to_string();
+        assert_eq!(kol(31, 46), "up");
+        assert_eq!(kol(46, 55), "up");
     }
 }
