@@ -242,7 +242,10 @@ impl App {
             let left = run.ts.iter().filter(|s| !s.fixed).count();
             (t.title, t.build, left, run.ts[i].hints)
         };
-        let msg = if build {
+        let whole_build = self.run.as_ref().and_then(|r| r.week.as_ref()).map(|w| w.build.is_some()).unwrap_or(false);
+        let msg = if build && !whole_build {
+            format!("{}{} är klart!", if proven { "Bevisat! " } else { "" }, title)
+        } else if build {
             format!("{}{} är klart!{}", if proven { "Bevisat! " } else { "" }, title, if left > 0 { format!(" {} steg kvar i bygget.", left) } else { String::new() })
         } else if proven {
             format!("Bevisat! {} är löst. Skriv felrapporten med F.", title)

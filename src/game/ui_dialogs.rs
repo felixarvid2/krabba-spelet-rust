@@ -790,7 +790,12 @@ impl App {
         let mut items: Vec<QItem> = vec![];
         if let Some(w) = self.run.as_ref().and_then(|r| r.week.as_ref()) {
             for q in &w.quiz {
-                items.push(QItem { q: q.q.to_string(), opts: q.options.iter().map(|s| s.to_string()).collect(), answer: q.answer, explain: q.explain.to_string() });
+                // Datat har rätt svar först; blanda deterministiskt så att svaret inte alltid ligger överst
+                let right = q.options.get(q.answer).map(|s| s.to_string()).unwrap_or_default();
+                let mut opts: Vec<String> = q.options.iter().map(|s| s.to_string()).collect();
+                opts.sort_by_key(|o| U::hash(&format!("{}{}", q.q, o)));
+                let answer = opts.iter().position(|o| *o == right).unwrap_or(0);
+                items.push(QItem { q: q.q.to_string(), opts, answer, explain: q.explain.to_string() });
             }
         }
         if items.is_empty() {

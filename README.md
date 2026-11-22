@@ -101,6 +101,10 @@ Konsolen, ramar och MAC-adresser, IP och subnätning, VLAN och trunkar, routing,
 
 Nav och ekrar, brandvägg och VPN, OSPF, BGP med PAT och reservdefault.
 
+### CCNA 200-301 – modul 1–8
+
+Åtta moduler som följer provet CCNA 200-301: Nätverksgrunder och IPv6; VLAN, EtherChannel och LLDP; Spanning tree (Rapid PVST+); Routing och statiska rutter; OSPF; IP-tjänster (NAT, syslog, TFTP); Säkerhet (port security, ACL på vty, DHCP snooping, SNMP); Trådlöst och automation (WPA2/WPA3 och REST-API). Varje modul har riktiga fel, konfigurationsuppgifter och en längre frågesport med förklaringar. Handbokens flik CCNA 200-301 kopplar provets områden till var du övar dem.
+
 ### Bygg från grunden 1–5
 
 Fabriksinställda enheter som du konfigurerar steg för steg.
@@ -111,7 +115,7 @@ Fabriksinställda enheter som du konfigurerar steg för steg.
 - **Karriär** (J): XP, rang och 50 prestationer. Veckoutmaningar, kaffe som gör dig snabbare och Krabban som gömmer sig nära ett av veckans fel – fånga den för en ledtråd.
 - **Liv i kontoret**: kollegorna går omkring, katten, ankorna, duvorna och måsen, dag, kväll och natt, sol, moln och regn.
 - **Ljud**: syntetiserade ljud som i originalet – fotsteg efter golv, fläktar, regn, kontorssorl, terminalknatter, djur och bakgrundsmusik. Ställs in under Inställningar.
-- **Handboken** (H): kommandon, felbibliotek, adressplan, subnätsräknare, OSI-modellen och ordlista.
+- **Handboken** (H): kommandon, felbibliotek, adressplan, subnätsräknare, OSI-modellen, ordlista och fliken CCNA 200-301 med provets områden.
 
 Varje fel är simulerat på riktigt: symptomen räknas fram ur konfigurationen (länkar, duplex, VLAN, STP, routing, OSPF, BGP, ARP, ACL, NAT, DHCP, DNS, PoE, port security, IPsec, MTU och lastbalansering). Ett fel försvinner bara när orsaken är rättad.
 

@@ -240,7 +240,7 @@ fn ospf_ifaces(st: &State, d: &Derived, dev: &str) -> IndexMap<String, OspfIf> {
                 up: ep.map(|e| e.up).unwrap_or(false),
                 ep_key: ek,
                 is_loop: i.is_loop,
-                serial: n.starts_with("Serial"),
+                serial: n.starts_with("Serial") || i.x.get("ospf net").map(|v| v.ends_with("point-to-point")).unwrap_or(false),
                 bw: bandwidth(st, dev, n),
             },
         );

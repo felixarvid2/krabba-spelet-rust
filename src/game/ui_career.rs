@@ -95,7 +95,7 @@ fn cond(id: &str, st: &BTreeMap<String, f64>, p: &ProgressInfo) -> bool {
         "exam" => s("exams") >= 1.0,
         "allweeks" => (1..=WEEK_COUNT).all(|w| p.weeks.contains_key(&w)),
         "stars27" => (1..=WEEK_COUNT).map(|w| p.weeks.get(&w).copied().unwrap_or(0)).sum::<u32>() >= WEEK_COUNT * 3,
-        "build1" => p.weeks.keys().any(|&k| k > 100),
+        "build1" => p.weeks.keys().any(|&k| (101..=200).contains(&k)),
         "buildall" => (101..=100 + BUILD_COUNT).all(|w| p.weeks.contains_key(&w)),
         "week10" => p.weeks.contains_key(&10),
         "df5" => s("dfPings") >= 5.0,

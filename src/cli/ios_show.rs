@@ -520,7 +520,7 @@ fn running_config_text(d: &Device, c: &IosConfig) -> String {
         p("ip scp server enable".into());
     }
     p("!".into());
-    p("spanning-tree mode pvst".into());
+    p(c.x.get("stp mode").cloned().unwrap_or_else(|| "spanning-tree mode pvst".into()));
     p("spanning-tree extend system-id".into());
     if !router {
         let mut pr: std::collections::BTreeMap<u32, Vec<u16>> = Default::default();
@@ -615,8 +615,10 @@ fn running_config_text(d: &Device, c: &IosConfig) -> String {
     if c.lldp {
         p("lldp run".into());
     }
-    for v in c.x.values() {
-        p(v.clone());
+    for (k, v) in c.x.iter() {
+        if k != "stp mode" {
+            p(v.clone());
+        }
     }
     if let Some(sn) = &c.snmp {
         for (k, v) in &sn.communities {
@@ -1586,7 +1588,7 @@ pub fn spanning_tree(st: &mut State, dev: &str, only_vlan: Option<u16>) -> Strin
         let root_dev = info.and_then(|i| st.devices.get(&i.root)).unwrap_or(d);
         let rb = sim::bridge_id(root_dev, v);
         let mb = sim::bridge_id(d, v);
-        o.push("  Spanning tree enabled protocol ieee".into());
+        o.push(format!("  Spanning tree enabled protocol {}", if c.x.contains_key("stp mode") { "rstp" } else { "ieee" }));
         o.push(format!("  Root ID    Priority    {}", rb.pr));
         o.push(format!("             Address     {}", U::mac_dots(&root_dev.base_mac)));
         match info {
@@ -2464,6 +2466,18 @@ pub fn ntp_status(st: &mut State, dev: &str) -> String {
     }
     "Clock is unsynchronized, stratum 16, no reference clock\nnominal freq is 119.2092 Hz, actual freq is 119.2092 Hz, precision is 2**18\nreference time is 00000000.00000000 (00:00:00.000 UTC Mon Jan 1 1900)".into()
 }
+/// Nivånamnet för "logging trap <nivå>" (namn eller 0-7), standard informational
+fn trap_level(line: Option<&String>) -> &'static str {
+    const L: [&str; 8] = ["emergencies", "alerts", "critical", "errors", "warnings", "notifications", "informational", "debugging"];
+    let w = match line.and_then(|l| l.split_whitespace().nth(2)) {
+        Some(w) => w,
+        None => return "informational",
+    };
+    if let Ok(n) = w.parse::<usize>() {
+        return L.get(n).copied().unwrap_or("informational");
+    }
+    L.iter().find(|l| **l == w).copied().unwrap_or("informational")
+}
 pub fn show_logging(st: &mut State, dev: &str) -> String {
     let d = st.dev(dev);
     let c = &d.cfg().logging;
@@ -2487,7 +2501,7 @@ pub fn show_logging(st: &mut State, dev: &str) -> String {
         String::new(),
         "No active filter modules.".to_string(),
         String::new(),
-        format!("    Trap logging: level informational, {} message lines logged", n + 12),
+        format!("    Trap logging: level {}, {} message lines logged", trap_level(d.cfg().x.get("logging trap")), n + 12),
     ];
     for h in &c.hosts {
         o.push(format!("        Logging to {}  (udp port 514, audit disabled,", h));

@@ -334,6 +334,33 @@ pub fn register(reg: &mut Reg) {
     reg.def("if", "ip ospf dead-interval", clear_if(|i| i.ospf_dead = None), NO_ONLY);
     reg.def("if", "ip ospf cost", clear_if(|i| i.ospf_cost = None), NO_ONLY);
     reg.def("if", "bandwidth", clear_if(|i| i.bandwidth = None), NO_ONLY);
+    // Nätverkstyp: point-to-point tar bort DR/BDR-valet på Ethernet (CCNA)
+    for (pat, p2p) in [("ip ospf network point-to-point", true), ("ip ospf network broadcast", false)] {
+        reg.d("if", pat, move |s, st, a| {
+            let set = p2p && !a.neg;
+            let names = s.ctx.ifs.clone();
+            let c = cfg(s, st);
+            for n in &names {
+                if let Some(i) = c.ifaces.get_mut(n) {
+                    if set {
+                        i.x.insert("ospf net".into(), "ip ospf network point-to-point".into());
+                    } else {
+                        i.x.shift_remove("ospf net");
+                    }
+                }
+            }
+            S::touch(st);
+            ok()
+        });
+    }
+    reg.def(
+        "if",
+        "ip ospf network",
+        clear_if(|i| {
+            i.x.shift_remove("ospf net");
+        }),
+        NO_ONLY,
+    );
     reg.def("if", "clock rate", clear_if(|i| i.clock_rate = None), NO_ONLY);
     reg.d("if", "clock rate <n:300-8000000>", |s, st, a| {
         let names = s.ctx.ifs.clone();
