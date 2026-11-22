@@ -9,7 +9,7 @@ fn man_text(k: &str) -> Option<&'static str> {
     Some(match k {
         "ping" => "PING(8)\n  ping [-c antal] [-s storlek] [-M do] mål\n  -c  antal paket\n  -s  datastorlek i byte (56 som standard, + 28 byte huvud)\n  -M do  sätt DF-biten: routrar får inte dela paketet (hittar MTU-problem)",
         "ssh" => "SSH(1)\n  ssh [-l användare] [användare@]värd\n  Krypterad inloggning. Första gången frågar ssh om värdens nyckel.",
-        "curl" => "CURL(1)\n  curl [-I] [-s] URL\n  -I  bara svarshuvudet (statuskod, server)\n  -s  tyst läge\n  Testa en lastbalanserare: for i in 1 2 3 4; do curl -s http://tid/; done",
+        "curl" => "CURL(1)\n  curl [-I] [-s] URL\n  -I  bara svarshuvudet (statuskod, server)\n  -s  tyst läge\n  REST-API: curl http://192.168.1.196/api/v1/aps (även /api/v1/wlans)\n  Testa en lastbalanserare: for i in 1 2 3 4; do curl -s http://tid/; done",
         "tracepath" => "TRACEPATH(8)\n  tracepath mål\n  Som traceroute, men visar också den minsta MTU:n på vägen (pmtu).",
         "ip" => "IP(8)\n  ip -4 addr show     adresser\n  ip route show       vägar\n  ip route get <ip>   vilken väg ett paket tar\n  ip -4 neigh show    ARP-tabellen",
         "screen" => "SCREEN(1)\n  screen /dev/ttyUSB0 9600\n  Seriell konsol. Ctrl+A K stänger.",
@@ -92,6 +92,7 @@ impl HostSession {
                     "  traceroute <ip>              nslookup <namn>     clear",
                     "  curl http://<ip|namn>/       ping -s 1400 -M do <ip>   (stora paket, DF satt)",
                     "  for i in 1 2 3 4; do curl -s http://tid/; done   (testa lastbalanseraren)",
+                    "  curl http://192.168.1.196/api/v1/aps   (REST-API på WLC:n, även /api/v1/wlans)",
                     "  tracepath <ip>               ip route get <ip>   dig +short <namn>",
                     "  kommando | grep <mönster>    !! (kör om)         man <kommando>",
                     "  date   uptime   whoami   neofetch   fortune   history   echo",

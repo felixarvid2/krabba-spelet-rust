@@ -302,8 +302,8 @@ impl App {
     pub fn start_week(&mut self, n: u32, exam: bool) {
         let (st, week) = if n == 0 { (levels::base_state(10), None) } else { levels::start(n) };
         let site = week.as_ref().map(|w| w.site).unwrap_or("gbg");
-        let mut world = World::new(site, n);
-        world.set_week(n);
+        let mut world = World::new(site, levels::world_week(n));
+        world.set_week(levels::world_week(n));
         let ts: Vec<TaskState> = week.as_ref().map(|w| w.tasks.iter().map(|t| TaskState { known: t.build, ..Default::default() }).collect()).unwrap_or_default();
         let guide = if n == 1 && self.save.stars(1) == 0 && !exam && self.save.settings.difficulty != "hard" { 0 } else { -1 };
         let mut run = Run {
@@ -368,8 +368,8 @@ impl App {
         let mut st = sr.state;
         S::touch(&mut st);
         let ts: Vec<TaskState> = sr.tasks.iter().map(|t| TaskState { fixed: t.fixed, reported: t.reported, known: t.known, hints: t.hints, score: t.score, report: None }).collect();
-        let mut world = World::new(&sr.site, sr.week);
-        world.set_week(sr.week);
+        let mut world = World::new(&sr.site, levels::world_week(sr.week));
+        world.set_week(levels::world_week(sr.week));
         world.set_site(&sr.site);
         let mut run = Run {
             n: sr.week,
@@ -556,7 +556,7 @@ impl App {
     pub fn pending_reports(&self) -> Vec<usize> {
         match &self.run {
             Some(r) => match &r.week {
-                Some(w) if !w.tasks.iter().any(|t| t.build) => (0..w.tasks.len()).filter(|i| r.ts[*i].fixed && !r.ts[*i].reported).collect(),
+                Some(w) => (0..w.tasks.len()).filter(|i| !w.tasks[*i].build && r.ts[*i].fixed && !r.ts[*i].reported).collect(),
                 _ => vec![],
             },
             None => vec![],
@@ -885,6 +885,9 @@ impl App {
             // Flaggan som vecka 4 kontrollerar: spelaren har tittat på spanning-tree på SW2
             if dev == "SW2" && is_show_sp(line) {
                 run.st.flags.misc.insert("stpLooked".into(), true);
+            }
+            for f in levels::look_flags(dev, line) {
+                run.st.flags.misc.insert(f.into(), true);
             }
             run.x.chal_log.push((dev.to_string(), line.to_string()));
         }

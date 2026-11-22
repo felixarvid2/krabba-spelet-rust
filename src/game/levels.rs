@@ -76,6 +76,8 @@ mod build;
 mod data;
 #[path = "levels_kurs2.rs"]
 mod kurs2;
+#[path = "levels_ccna.rs"]
+mod ccna;
 use build::*;
 use kurs2::*;
 
@@ -124,6 +126,7 @@ pub fn all() -> Vec<Week> {
     let mut v = data::weeks1();
     v.extend(data::weeks2());
     v.extend(data::builds());
+    v.extend(ccna::weeks());
     v
 }
 pub fn def(n: u32) -> Option<Week> { all().into_iter().find(|w| w.week == n) }
@@ -131,10 +134,17 @@ pub fn def(n: u32) -> Option<Week> { all().into_iter().find(|w| w.week == n) }
 pub fn name(w: Option<&Week>) -> String {
     match w {
         None => "Fri träning".into(),
+        Some(w) if is_ccna(w.week) => format!("CCNA {}", w.week - 200),
         Some(w) => match w.build { Some(b) => format!("Bygge {}", b), None => format!("Vecka {}", w.week) },
     }
 }
-pub fn is_build(n: u32) -> bool { n > 100 }
+pub fn is_build(n: u32) -> bool { (101..200).contains(&n) }
+/// CCNA-läget: modul 1–8 är vecka 201–208
+pub fn is_ccna(n: u32) -> bool { (201..=299).contains(&n) }
+/// Veckonumret som världen (kollegor, föremål) ska använda
+pub fn world_week(n: u32) -> u32 { if is_ccna(n) { ccna::base(n) } else { n } }
+/// Flaggor som spelet sätter när spelaren kör kommandot `line` på enheten `dev`
+pub fn look_flags(dev: &str, line: &str) -> Vec<&'static str> { ccna::look_flags(dev, line) }
 /// Det felfria nätet för en vecka, med DHCP-adresser utdelade (baseState)
 pub fn base_state(week: u32) -> State {
     let mut st = State::new(build_golden(week));
@@ -156,7 +166,7 @@ pub fn base_state(week: u32) -> State {
 /// Startar en vecka eller ett bygge: bygger nätet, sätter in felen och kör after()
 pub fn start(n: u32) -> (State, Option<Week>) {
     let wk = def(n);
-    let base = if is_build(n) { build_base(n) } else if n == 0 { 1 } else { n };
+    let base = if is_build(n) { build_base(n) } else if is_ccna(n) { ccna::base(n) } else if n == 0 { 1 } else { n };
     let mut st = base_state(base);
     let Some(wk) = wk else { return (st, None) };
     // Ögonblicksbild först så att ändringarna ger loggrader
@@ -192,6 +202,7 @@ fn setup(n: u32, st: &mut State) {
         }
         104 => su_b4(st),
         105 => su_b5(st),
+        201..=299 => ccna::setup(n, st),
         _ => {}
     }
 }
@@ -225,6 +236,7 @@ fn after(n: u32, st: &mut State) {
             sim::ping(st, "PC-Molndal", "198.51.100.80", PingOpts::tcp(80));
         }
         101..=105 => renew_all(st),
+        201..=299 => ccna::after(n, st),
         _ => {}
     }
 }
@@ -601,7 +613,7 @@ pub struct Verify {
 
 /// Beviset för en uppgift i svårt läge (byggsteg och "titta"-uppgifter får också ett).
 pub fn verify(task_id: &str) -> Verify {
-    verify::table(task_id).unwrap_or_else(|| Verify {
+    verify::table(task_id).or_else(|| ccna::verify_table(task_id)).unwrap_or_else(|| Verify {
         on: vec!["Tekniker"],
         cmds: vec!["ping"],
         text: "Bevisa att felet är löst med ett ping från laptopen.",

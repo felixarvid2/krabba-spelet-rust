@@ -109,12 +109,13 @@ impl App {
         let mut hits: Vec<(Rect, MenuAct)> = vec![];
         let mx = 40;
         let cw = (w - 2 * mx - 4 * 12) / 5;
-        let ch = 58;
+        let ch = 54;
         let mut y = 98;
         let sections: Vec<(&str, Vec<&super::levels::Week>)> = vec![
             ("Kurs 1: Nätverksteknik (vecka 1-10, siffertangent 1-9 startar)", weeks.iter().filter(|x| x.build.is_none() && x.kurs == 1).collect()),
             ("Bygg från grunden (byggen 1-5)", weeks.iter().filter(|x| x.build.is_some()).collect()),
             ("Kurs 2: Routing och switching (vecka 11-14)", weeks.iter().filter(|x| x.build.is_none() && x.kurs == 2).collect()),
+            ("CCNA 200-301 (modul 1-8)", weeks.iter().filter(|x| x.build.is_none() && x.kurs == 3).collect()),
         ];
         let sel = self.menu_sel;
         let mouse = self.mouse;
@@ -123,11 +124,11 @@ impl App {
                 continue;
             }
             fonts.text(c, mx, y, label, 12.0, ACCENT, FontKind::Pixel);
-            y += 22;
+            y += 20;
             for (i, wk) in list.iter().enumerate() {
                 let col = (i % 5) as i32;
                 let row = (i / 5) as i32;
-                let r = Rect::new(mx + col * (cw + 12), y + row * (ch + 8), cw, ch);
+                let r = Rect::new(mx + col * (cw + 12), y + row * (ch + 6), cw, ch);
                 let idx = hits.len();
                 hits.push((r, MenuAct::Start(wk.week, false)));
                 let hover = r.contains(mouse.0, mouse.1);
@@ -137,6 +138,7 @@ impl App {
                 c.rect(r.x, r.y, r.w, r.h, if focus { 3 } else { 1 }, if focus { ACCENT } else { BORDER });
                 let head = match wk.build {
                     Some(b) => format!("Bygge {}", b),
+                    None if super::levels::is_ccna(wk.week) => format!("CCNA {}", wk.week - 200),
                     None => format!("Vecka {}", wk.week),
                 };
                 fonts.text(c, r.x + 8, r.y + 7, &head, 10.0, if stars > 0 { GOOD } else { LINK }, FontKind::Pixel);
@@ -147,10 +149,10 @@ impl App {
                     c.circle(sx, r.y + 14, 5, if on { ACCENT } else { rgb(0x3a, 0x40, 0x60) }, 255);
                 }
             }
-            y += ((list.len() as i32 + 4) / 5) * (ch + 8) + 8;
+            y += ((list.len() as i32 + 4) / 5) * (ch + 6) + 6;
         }
         // knappar
-        y += 6;
+        y += 4;
         let mut bx = mx;
         let cont_label = match (&self.save.run, self.save.last_week) {
             (Some(r), _) => format!("Fortsätt {}", super::levels::name(weeks.iter().find(|x| x.week == r.week)).to_lowercase()),

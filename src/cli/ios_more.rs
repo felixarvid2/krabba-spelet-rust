@@ -466,6 +466,12 @@ fn misc_cfg_cmds(reg: &mut Reg) {
         };
         reg.d("config", &format!("logging {} <word>", w), keep_g(key, move |a| format!("logging {} {}", w, a.s(0)), false));
     }
+    reg.d("config", "logging trap", |s, st, a| {
+        if a.neg {
+            cfg(s, st).x.shift_remove("logging trap");
+        }
+        ok()
+    });
     reg.d("config", "logging console", |s, st, a| {
         let x = &mut cfg(s, st).x;
         if a.neg {
@@ -781,6 +787,7 @@ fn tftp_copy(s: &mut IosSession, st: &mut State, _a: &Args) -> CmdResult {
                 let name = if f.is_empty() { file.clone() } else { f.to_string() };
                 return CmdResult::delayed(format!(".....\n%Error opening tftp://{}/{} (Timed out)", ip, name), 2500);
             }
+            st.flags.misc.insert(format!("tftp:{}:{}", s.dev, ip), true);
             let bytes = SH::running_config(st, &s.dev.clone()).chars().count();
             CmdResult::delayed(format!("!!\n{} bytes copied in 1.084 secs ({} bytes/sec)", bytes, (bytes as f64 / 1.084).round() as i64), 900)
         });

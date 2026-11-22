@@ -1092,8 +1092,19 @@ fn reg_config(reg: &mut Reg) {
     });
     reg.d("config", "service timestamps debug datetime msec", |_, _, _| result(""));
     reg.d("config", "cdp run", |_, _, _| result(""));
-    reg.d("config", "spanning-tree mode pvst", |_, _, _| result(""));
-    reg.d("config", "spanning-tree mode rapid-pvst", |_, _, _| result(""));
+    reg.d("config", "spanning-tree mode pvst", |s, st, _| {
+        cfg_mut(s, st).x.shift_remove("stp mode");
+        result("")
+    });
+    reg.d("config", "spanning-tree mode rapid-pvst", |s, st, a| {
+        let x = &mut cfg_mut(s, st).x;
+        if a.neg {
+            x.shift_remove("stp mode");
+        } else {
+            x.insert("stp mode".into(), "spanning-tree mode rapid-pvst".into());
+        }
+        result("")
+    });
     reg.d("config", "spanning-tree extend system-id", |_, _, _| result(""));
 }
 

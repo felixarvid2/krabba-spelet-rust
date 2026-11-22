@@ -173,25 +173,28 @@ fn solve1(rep: &mut Rep, st: &mut State, id: &str, w: &Week) {
 #[test]
 fn data_shape() {
     let all = levels::all();
-    assert_eq!(all.len(), 19);
+    assert_eq!(all.len(), 27);
     let nums: Vec<u32> = all.iter().map(|w| w.week).collect();
-    assert_eq!(nums, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 101, 102, 103, 104, 105]);
+    assert_eq!(nums, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 101, 102, 103, 104, 105, 201, 202, 203, 204, 205, 206, 207, 208]);
     for w in &all {
         for t in &w.tasks {
             assert_eq!(t.hints.len(), 3, "{} ska ha tre ledtrådar", t.id);
-            if w.build.is_none() {
+            // Byggsteg (även konfigurationsuppgifter i CCNA-läget) har ingen felrapport
+            if w.build.is_none() && !t.build {
                 let r = t.report.as_ref().unwrap_or_else(|| panic!("{} saknar rapport", t.id));
                 assert_eq!((r.cause.len(), r.fix.len()), (4, 4), "{}", t.id);
             }
         }
         if w.build.is_none() {
             assert!(!w.quiz.is_empty(), "vecka {} saknar quiz", w.week);
-            assert!(w.challenge.is_some());
+            // Veckoutmaningar finns i kurs 1 och 2, inte i CCNA-läget
+            assert_eq!(w.challenge.is_some(), w.kurs < 3, "vecka {}", w.week);
         }
     }
     assert_eq!(levels::name(levels::def(101).as_ref()), "Bygge 1");
     assert_eq!(levels::name(levels::def(3).as_ref()), "Vecka 3");
     assert_eq!(levels::name(None), "Fri träning");
+    assert_eq!(levels::name(levels::def(205).as_ref()), "CCNA 5");
 }
 
 #[test]

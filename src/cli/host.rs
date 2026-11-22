@@ -221,6 +221,7 @@ pub(super) fn mac_of(h: &Device) -> String {
 pub(super) struct Url {
     pub host: String,
     pub port: i64,
+    pub path: String,
 }
 
 /// Samma som regexen i parseUrl (scheme valfritt, host, :port, /sökväg)
@@ -254,7 +255,50 @@ pub(super) fn parse_url(u: &str) -> Option<Url> {
     if !rest.is_empty() && !rest.starts_with('/') {
         return None;
     }
-    Some(Url { host: host.to_string(), port: port.unwrap_or(if https { 443 } else { 80 }) })
+    Some(Url { host: host.to_string(), port: port.unwrap_or(if https { 443 } else { 80 }), path: rest.to_string() })
+}
+
+/// REST-API på WLC:n (/api/v1/aps, /api/v1/wlans). None om målet inte är en WLC.
+fn wlc_rest(st: &mut State, host: &str, ip: &str, u: &Url, head_only: bool) -> Option<(String, u32)> {
+    let wlc_id = st.devices.iter().find(|(_, d)| d.kind == Kind::Wlc && d.wlc.as_ref().is_some_and(|w| w.interfaces.values().any(|i| i.ip == ip))).map(|(k, _)| k.clone())?;
+    let p = S::ping(st, host, ip, S::PingOpts::default());
+    if !p.ok {
+        return Some((format!("curl: (28) Failed to connect to {} port {} after 10002 ms: Timeout was reached", u.host, u.port), 3500));
+    }
+    let path = u.path.split('?').next().unwrap_or("").trim_end_matches('/');
+    let w = st.devices[&wlc_id].wlc.clone()?;
+    let body = match path {
+        "/api/v1/aps" => {
+            let dd = S::get(st);
+            let joined = &dd.ap_joined;
+            let aps: Vec<serde_json::Value> = w
+                .ap_channels
+                .iter()
+                .map(|(n, ch)| {
+                    let ap_ip = st.devices.get(n).and_then(|d| d.nic.as_ref()).and_then(|x| x.static_.as_ref()).map(|s| s.ip.clone()).unwrap_or_default();
+                    serde_json::json!({ "name": n, "ip": ap_ip, "channel": ch, "joined": joined.get(n).copied().unwrap_or(false), "mode": "local" })
+                })
+                .collect();
+            Some(serde_json::json!({ "aps": aps }))
+        }
+        "/api/v1/wlans" => {
+            let wl: Vec<serde_json::Value> = w
+                .wlans
+                .iter()
+                .map(|(id, x)| serde_json::json!({ "id": id, "ssid": x.ssid, "interface": x.iface, "security": x.security, "enabled": x.enabled }))
+                .collect();
+            Some(serde_json::json!({ "wlans": wl }))
+        }
+        _ => None,
+    };
+    let (status, json) = match body {
+        Some(b) => ("200 OK", b),
+        None => ("404 Not Found", serde_json::json!({ "error": "not found" })),
+    };
+    if head_only {
+        return Some((format!("HTTP/1.1 {}\nContent-Type: application/json", status), 400));
+    }
+    Some((serde_json::to_string_pretty(&json).unwrap_or_default(), 600))
 }
 
 /// Gemensam curl: (text, fördröjning)
@@ -270,6 +314,11 @@ pub(super) fn curl_text(st: &mut State, host: &str, url: &str, head_only: bool) 
             return (format!("curl: (6) Could not resolve host: {}", u.host), if e == "timeout" { 2500 } else { 200 });
         }
         ip = rr.ip.unwrap_or_default();
+    }
+    if u.path.starts_with("/api/v1/") {
+        if let Some(r) = wlc_rest(st, host, &ip, &u, head_only) {
+            return r;
+        }
     }
     let h = S::http_get(st, host, &ip, u.port);
     if !h.ok && h.code == 0 {

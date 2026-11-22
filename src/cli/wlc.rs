@@ -147,10 +147,34 @@ impl WlcSession {
                     return String::new();
                 }
             }
+            if op == "security" {
+                let kind = a.get(3).copied().unwrap_or("").to_lowercase();
+                let sec = match kind.as_str() {
+                    "open" => Some("Open"),
+                    "wpa2-psk" => Some("WPA2-PSK"),
+                    "wpa3-sae" => Some("WPA3-SAE"),
+                    _ => None,
+                };
+                let id = parse_int(a.get(4).copied());
+                let key = id.and_then(|i| u32::try_from(i).ok());
+                let exists = key.is_some_and(|k| self.w(st).wlans.contains_key(&k));
+                if let (Some(sec), true, Some(k)) = (sec, exists, key) {
+                    if self.w(st).wlans[&k].enabled {
+                        return format!("\nRequest failed: WLAN must be disabled before changing its security.\n(Use \"config wlan disable {}\" first.)", k);
+                    }
+                    self.w_mut(st).wlans.get_mut(&k).expect("WLAN").security = sec.to_string();
+                    sim::touch(st);
+                    return String::new();
+                }
+                if sec.is_some() && id.is_some_and(|i| i != 0) {
+                    return "\nWLAN identifier is invalid.".into();
+                }
+                return "\nIncorrect usage. Use: config wlan security {open|wpa2-psk|wpa3-sae} <id>".into();
+            }
             if !exists && id.is_some_and(|i| i != 0) {
                 return "\nWLAN identifier is invalid.".into();
             }
-            return "\nIncorrect usage. Use: config wlan {enable|disable} <id>  |  config wlan interface <id> <interface-name>".into();
+            return "\nIncorrect usage. Use: config wlan {enable|disable} <id>  |  config wlan interface <id> <interface-name>  |  config wlan security {open|wpa2-psk|wpa3-sae} <id>".into();
         }
         if sub == "802.11b" && a.get(2).copied().unwrap_or("").to_lowercase() == "channel" && a.get(3).copied().unwrap_or("").to_lowercase() == "ap" {
             let ap = a.get(4).copied().unwrap_or("undefined");
@@ -412,16 +436,17 @@ fn wlan_summary(w: &Wlc) -> String {
         String::new(),
         format!("Number of WLANs.................................. {}", w.wlans.len()),
         String::new(),
-        "WLAN ID  WLAN Profile Name / SSID               Status    Interface Name        PMIPv6 Mobility".into(),
-        "-------  -------------------------------------  --------  --------------------  ---------------".into(),
+        "WLAN ID  WLAN Profile Name / SSID               Status    Interface Name        Security   PMIPv6 Mobility".into(),
+        "-------  -------------------------------------  --------  --------------------  ---------  ---------------".into(),
     ];
     for (id, wl) in &w.wlans {
         o.push(format!(
-            "{}{}{}{}none",
+            "{}{}{}{}{}none",
             U::pad(id, 9),
             U::pad(format!("{} / {}", wl.ssid, wl.ssid), 39),
             U::pad(if wl.enabled { "Enabled" } else { "Disabled" }, 10),
-            U::pad(&wl.iface, 22)
+            U::pad(&wl.iface, 22),
+            U::pad(&wl.security, 11)
         ));
     }
     o.join("\n")
@@ -441,6 +466,7 @@ fn wlan_detail(w: &Wlc, id: Option<i64>) -> String {
         format!("Status........................................... {}", if wl.enabled { "Enabled" } else { "Disabled" }),
         format!("Interface........................................ {}", wl.iface),
         format!("VLAN............................................. {}", vlan),
+        format!("Security Type........................................ {}", wl.security),
         "Security".into(),
         "   802.11 Authentication:........................ Open System".into(),
         "   Static WEP Keys............................... Disabled".into(),
